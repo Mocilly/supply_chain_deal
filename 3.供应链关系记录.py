@@ -371,9 +371,18 @@ files
 for index,file in enumerate(files):
     print(f'索引 {index}： {file}')
 files[6]
-df_sc = pd.read_excel(files[?],dtype={'source_company_id':str,'target_company_id':str,
+# df_sc = pd.read_excel(files[?],dtype={'source_company_id':str,'target_company_id':str,
+#                                               'SOURCE_ticker':str,'TARGET_ticker':str}) 
+df_sc = pd.read_excel(r'C:\Users\32915\Desktop\8.新算法_添加所属国家后的供应链关系表.xlsx',
+                      dtype={'source_company_id':str,'target_company_id':str,
                                               'SOURCE_ticker':str,'TARGET_ticker':str}) 
 
+
+source_cop_set = set()  # 供应链中的source公司集合  ,此处创建空集合  ,集合中只有唯一值，将所有公司储存进去
+
+for i in df_sc.index:
+    source_cop_set.add(df_sc.loc[i,'source_company_id'])
+    print(f'已解决{i+1}')
 
 companies = dict()
 company_set = set()
@@ -394,11 +403,18 @@ for i in df_sc.index:
     if not company_in_set:
         target_country = df_sc.loc[i,'target_company_belong']
         has_ticker = not pd.isna(df_sc.loc[i, 'TARGET_ticker'])
+        companies[cop] = Company(cop,target_country,has_ticker)
+    print(f'已解决{i+1}/{len(df_sc.index)}')
 
 
-
-
-
+relations = []
+for i in df_sc.index:
+    source_cop =  df_sc.loc[i,'source_company_id']
+    target_cop = df_sc.loc[i,'target_company_id']
+    start_time = df_sc.loc[i,'start_']
+    end_time = df_sc.loc[i,'end_']
+    relations.append((companies[source_cop],companies[target_cop],start_time,end_time))
+    print(f'已解决{i+1}/{len(df_sc.index)}')
 
 
 
