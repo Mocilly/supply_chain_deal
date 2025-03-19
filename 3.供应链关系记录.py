@@ -40,7 +40,7 @@ path_dic = {'foreign_data':r"C:\Users\Mocilly\Desktop\研创平台课题项目\�
 
 
 
-# region  -----7.1 将新建的断裂指标添加到上市公司数据中_ 新计算方法(关联产业链破裂也算作break计入上市公司)
+# 7.1 将新建的断裂指标添加到上市公司数据中_ 新计算方法(关联产业链破裂也算作break计入上市公司)
 '''新计算方法说明:
     考虑到上市公司的安全性资金较为充裕，因此在贸易战期间其产业链不太可能会发生断裂。
     因此我们采用一种新的方法来计算成上市公司的产业链断裂。
@@ -48,7 +48,6 @@ path_dic = {'foreign_data':r"C:\Users\Mocilly\Desktop\研创平台课题项目\�
 '''
 
 
-#endregion -----7.1 将新建的断裂指标添加到上市公司数据中_ 新计算方法(关联产业链破裂也算作break计入上市公司)
 
 
 # region 方法，类合集
@@ -61,7 +60,7 @@ class Company:
     """使用单例模式确保公司对象唯一性"""
     _instances = WeakValueDictionary()
     
-    def __new__(cls, cid: str, country: str, listed: bool,company_status = ['active']):
+    def __new__(cls, cid: str, country: str, listed: bool):
         if cid in cls._instances:
             return cls._instances[cid]
 
@@ -69,7 +68,6 @@ class Company:
         instance.id = cid
         instance.country = country
         instance.listed = listed
-        instance.status = company_status
         cls._instances[cid] = instance
         return instance
 
@@ -123,7 +121,7 @@ class SupplyChainAnalyzer:
         # print(f'supplier_groups:{supplier_groups}')
         for fid, relations in supplier_groups.items():
             sorted_rels = sorted(relations, key=lambda x: x.start)
-            print(f'sorted_rels:{sorted_rels}')
+            # print(f'sorted_rels:{sorted_rels}')
 
             for i in range(len(sorted_rels)-1):
                 for r in range(i+1,(len(sorted_rels))):
@@ -135,21 +133,21 @@ class SupplyChainAnalyzer:
                     pre_transfer_check = prev.from_co.id == curr.from_co.id
                     recover_check = (prev.from_co.id,prev.to_co.id) == (curr.from_co.id,curr.to_co.id)
 
-                    print(f"{prev}:{curr}")
-                    print(f'(prev.from_co.id,prev.to_co.id):{(prev.from_co.id,prev.to_co.id)}')
-                    print(f'(curr.from_co.id,curr.to_co.id):{(curr.from_co.id,curr.to_co.id)}')
-                    print(f'recover_check:{recover_check}')
-                    print(f'i:{i}')
+                    # print(f"{prev}:{curr}")
+                    # print(f'(prev.from_co.id,prev.to_co.id):{(prev.from_co.id,prev.to_co.id)}')
+                    # print(f'(curr.from_co.id,curr.to_co.id):{(curr.from_co.id,curr.to_co.id)}')
+                    # print(f'recover_check:{recover_check}')
+                    # print(f'i:{i}')
 
 
                     if recover_check:
                         if gap > self.recovery_period :
-                            print(1)
+                            # print(1)
                             
                             prev.status = "permanent_break"
-                            print(f'prev.status:{prev.status}')
+                            # print(f'prev.status:{prev.status}')
                             curr.status = "active"  # curr.status remains as active
-                            print(f'curr.status:{curr.status}')
+                            # print(f'curr.status:{curr.status}')
                         elif (gap > timedelta(0)) :
                             curr.status = "recovered"
                     elif pre_transfer_check:
@@ -157,7 +155,7 @@ class SupplyChainAnalyzer:
                             prev.status = "permanent_break"
                             curr.status = 'transfer'
 
-                    print('----------------------------------------')
+                    # print('----------------------------------------')
 
 
 
@@ -165,6 +163,8 @@ class SupplyChainAnalyzer:
     def find_supply_chains(self, 
                         min_length: int = 3,
                         max_depth: int = 20,
+                        start_index:int = 0,
+                        end_index: int = 100,
         ) -> List[List['SupplyRelation']]:
         
         valid_chains = []
@@ -176,7 +176,13 @@ class SupplyChainAnalyzer:
             
             # 记录所有有效路径（不限制状态）
             if len(path) >= min_length:
-                valid_chains.append(path.copy())
+                country_check = False
+                for rel in path:
+                    contains_cn = (rel.from_co.country == 'CN') or (rel.to_co.country == 'CN')
+                    if  contains_cn:
+                        country_check = True
+                if country_check:
+                    valid_chains.append(path.copy())
             
             if len(path) >= max_depth:
                 return
@@ -198,81 +204,64 @@ class SupplyChainAnalyzer:
                         path + [rel],
                         visited_companies | {rel.to_co},  # 使用集合合并避免修改原集合
                         new_last_end)
-        
         # 遍历所有可能的起始点
+        count = 0
         for start_company in self.graph:
+            internal_check = (count>= start_index) and (count < end_index)
+            #增加初始节点为中国公司的检验
+            is_cn = start_company.country == 'CN'
+            if not internal_check or not is_cn:
+                count+=1
+                print(f'已跳过第{count+1}个')
+                continue
             # 生成所有初始路径分支
             for initial_rel in self.graph.get(start_company, []):
                 dfs(initial_rel.to_co,
                     [initial_rel],
                     {start_company, initial_rel.to_co},
                     initial_rel.end)
-        
-        return valid_chains
+            print(f'已解决第{count+1}个')
+            count+=1
+        return valid_chains 
 
 
+
+
+    # def detect_transfers(self) -> List[Dict]:
+    #     """优化后的产业转移检测"""
+    #     transfers = []
         
-    def detect_transfers(self) -> List[Dict]:
-        """优化后的产业转移检测"""
-        transfers = []
-        
-        for supplier in self.graph.values():
-            sorted_rels = sorted(supplier, key=lambda x: x.start)
+    #     for supplier in self.graph.values():
+    #         sorted_rels = sorted(supplier, key=lambda x: x.start)
             
-            for i in range(1, len(sorted_rels)):
-                prev = sorted_rels[i-1]
-                curr = sorted_rels[i]
+    #         for i in range(1, len(sorted_rels)):
+    #             prev = sorted_rels[i-1]
+    #             curr = sorted_rels[i]
                 
-                # 转移成立条件
-                time_condition = curr.start - prev.end > self.recovery_period
-                client_change = prev.to_co != curr.to_co
-                status_condition = prev.status in ("permanent_break","recovered",'active') #如果前一状态是recovered，那下一节点也可以转移
-                print('转移检测')
-                print(f"转移检测情况：time_condition:{time_condition} + client_change:{client_change} + status_condition:{status_condition}")
-                print(f'间隔时间：{curr.start - prev.end}')
-                print(f'前一节点的状态：{prev.status}')
-                print(f'现在节点的状态：{curr.status}')
-                if time_condition and client_change and status_condition:
-                    print('转移成立')
-                    prev.status = 'permanent_break'
-                    curr.status = 'transfer'
-                    transfers.append({
-                        'supplier': prev.from_co.id,
-                        'from_client': prev.to_co.id,
-                        'to_client': curr.to_co.id,
-                        'transfer_date': curr.start,
-                        'gap_days': (curr.start - prev.end).days
-                    })
+    #             # 转移成立条件
+    #             time_condition = curr.start - prev.end > self.recovery_period
+    #             client_change = prev.to_co != curr.to_co
+    #             status_condition = prev.status in ("permanent_break","recovered",'active') #如果前一状态是recovered，那下一节点也可以转移
+    #             # print('转移检测')
+    #             # print(f"转移检测情况：time_condition:{time_condition} + client_change:{client_change} + status_condition:{status_condition}")
+    #             # print(f'间隔时间：{curr.start - prev.end}')
+    #             # print(f'前一节点的状态：{prev.status}')
+    #             # print(f'现在节点的状态：{curr.status}')
+    #             if time_condition and client_change and status_condition:
+    #                 # print('转移成立')
+    #                 prev.status = 'permanent_break'
+    #                 curr.status = 'transfer'
+    #                 transfers.append({
+    #                     'supplier': prev.from_co.id,
+    #                     'from_client': prev.to_co.id,
+    #                     'to_client': curr.to_co.id,
+    #                     'transfer_date': curr.start,
+    #                     'gap_days': (curr.start - prev.end).days
+    #                 })
                     
-        return transfers
+    #     return transfers
     
-
-
-# region 测试数据生成
-"""生成包含三种状态场景的测试数据"""
-    # 创建公司实例（使用单例模式）
-# companies = {
-#     'S1': Company('S1', '中国', listed=True),
-#     'S2': Company('S2', '美国', listed=False),
-#     'S3': Company('S3', '美国', listed=False),
-#     'S4': Company('S4', '美国', listed=False),
-#     'S5': Company('S5', '美国', listed=False),
-#     'C1': Company('C1', '日本', listed=True),
-#     'C2': Company('C2', '德国', listed=False),
-#     'C3': Company('C3', '韩国', listed=True),
-#     'C4': Company('C4', '韩国', listed=True),
-#     'C5': Company('C5', '法国', listed=True),
-#     'C6': Company('C6', '法国', listed=True),
-#     'C7': Company('C7', '法国', listed=True),
-#     'C8': Company('C8', '法国', listed=True),
-#     'C9': Company('C9', '法国', listed=True),
-#     'C10': Company('C10', '法国', listed=True),
-#     'C11': Company('C11', '法国', listed=True),
-#     'C12': Company('C12', '法国', listed=True),
-#     'C13': Company('C13', '法国', listed=True),
-#     'C14': Company('C14', '法国', listed=True),
-
-# }
+#endregion 方法，类合集
 
 #获取供应链表
 base_dir = path_dic['foreign_data']
@@ -371,12 +360,28 @@ files = [os.path.join(base_dir, file) for file in os.listdir(base_dir)]
 files
 for index,file in enumerate(files):
     print(f'索引 {index}： {file}')
-files[6]
-# df_sc = pd.read_excel(files[?],dtype={'source_company_id':str,'target_company_id':str,
-#                                               'SOURCE_ticker':str,'TARGET_ticker':str}) 
-df_sc = pd.read_excel(r'C:\Users\32915\Desktop\8.新算法_添加所属国家后的供应链关系表.xlsx',
-                      dtype={'source_company_id':str,'target_company_id':str,
+files[7]
+df_sc = pd.read_excel(files[7],dtype={'source_company_id':str,'target_company_id':str,
                                               'SOURCE_ticker':str,'TARGET_ticker':str}) 
+# df_sc = pd.read_excel(r'C:\Users\32915\Desktop\8.新算法_添加所属国家后的供应链关系表.xlsx',
+#                       dtype={'source_company_id':str,'target_company_id':str,
+#                                               'SOURCE_ticker':str,'TARGET_ticker':str}) 
+
+
+
+# Pandas 的 Timestamp 使用 64 位整数 存储纳秒级时间戳（从 1970 年 1 月 1 日起算），
+# 其最大日期范围约为 公元 1677 年到 2262 年。
+# 当代码中使用了超出此范围的日期（如 4000-01-01），尝试将其转换为纳秒时会触发整数溢出（OverflowError），
+# 最终导致 OutOfBoundsDatetime 错误。
+MAX_PANDAS_DATE = pd.Timestamp.max  # This is 2262-04-11
+for i in df_sc.index:
+    end_time = df_sc.loc[i,'end_']
+    if end_time > datetime(2025,1,1):
+        df_sc.loc[i,'end_'] = datetime(2025,1,1)
+    print(f'已解决{i+1}/{len(df_sc.index)}')
+
+df_sc[df_sc['end_'] >= datetime(2025,1,1)]
+
 
 
 source_cop_set = set()  # 供应链中的source公司集合  ,此处创建空集合  ,集合中只有唯一值，将所有公司储存进去
@@ -408,13 +413,13 @@ for i in df_sc.index:
     print(f'已解决{i+1}/{len(df_sc.index)}')
 
 
-relations = []
+sample_relations = []
 for i in df_sc.index:
     source_cop =  df_sc.loc[i,'source_company_id']
     target_cop = df_sc.loc[i,'target_company_id']
     start_time = df_sc.loc[i,'start_']
     end_time = df_sc.loc[i,'end_']
-    relations.append((companies[source_cop],companies[target_cop],start_time,end_time))
+    sample_relations.append((companies[source_cop],companies[target_cop],start_time,end_time))
     print(f'已解决{i+1}/{len(df_sc.index)}')
 
 
@@ -422,52 +427,110 @@ for i in df_sc.index:
 
 
 
-test_relations = [
-# 场景1：永久断裂 (间隔120天) - 原有
-(companies['S1'], companies['C1'], datetime(2019,1,1), datetime(2019,6,30)),
-(companies['S1'], companies['C1'], datetime(2020,1,1), datetime(2020,12,31)),
-
-# 场景2：自动恢复 (间隔30天) - 原有
-(companies['S2'], companies['C2'], datetime(2020,3,1), datetime(2020,5,31)),
-(companies['S2'], companies['C2'], datetime(2020,7,1), datetime(2020,9,30)),
-
-# 场景3：产业转移 (间隔92天更换客户) - 原有
-(companies['S1'], companies['C2'], datetime(2021,1,1), datetime(2021,3,31)),
-(companies['S1'], companies['C3'], datetime(2021,7,1), datetime(2021,12,31)),
-
-# 新增场景4：四层供应链断裂（跨3个层级）
-# S3→C4→C5→C6 链条断裂
-(companies['S3'], companies['C4'], datetime(2020,1,1), datetime(2020,3,31)),
-(companies['C4'], companies['C5'], datetime(2020,4,1), datetime(2020,6,30)), 
-(companies['C5'], companies['C6'], datetime(2020,9,1), datetime(2020,12,31)),  # 中间层断裂95天
-
-# 新增场景5：五层供应链部分恢复
-# S4→C7→C8→C9→C10 混合断裂
-(companies['S4'], companies['C7'], datetime(2021,1,1), datetime(2021,4,30)),
-(companies['C7'], companies['C8'], datetime(2021,5,1), datetime(2021,7,31)),
-(companies['C8'], companies['C9'], datetime(2021,9,1), datetime(2021,11,30)),  # 断裂31天
-(companies['C9'], companies['C10'], datetime(2022,1,1), datetime(2022,6,30)),   # 跨年断裂
-
-# 新增场景6：多路径供应链网络
-# 同时存在 S5→C11 和 S5→C12 两条支线
-(companies['S5'], companies['C11'], datetime(2022,1,1), datetime(2022,3,31)),
-(companies['S5'], companies['C12'], datetime(2022,4,1), datetime(2022,6,30)),
-(companies['C11'], companies['C13'], datetime(2022,7,1), datetime(2022,9,30)),  # 更换下游客户
-(companies['C12'], companies['C14'], datetime(2022,8,1), datetime(2022,12,31))  # 重叠时间测试
-]
 relations = []
-for from_co, to_co, start, end in test_relations:
+count = 0
+len_sample_relations = len(sample_relations)
+for from_co, to_co, start, end in sample_relations:
     relations.append(SupplyRelation(from_co, to_co, start, end))
-relations
+    print(f'已解决{count+1}/{len_sample_relations}')
+    count+=1
+
+
+
+
+
+import json
+
+
+##################################################存储company变量
+# 将公司对象转换为字典列表
+companies_to_save = []
+count = 0
+total = len(companies)
+for key,cop in companies.items():
+    companies_to_save.append({
+        'id': cop.id,
+        'country': cop.country, 
+        'listed': cop.listed
+    })
+    print(f'已转换并保存 {count+1}/{total}')
+    count += 1
+
+################################################### 写入JSON文件
+with open(path_dic['save'] + 'company.json', 'w') as f:
+    json.dump(companies_to_save, f, indent=4)
+print("数据已保存至 company.json")
+
+##################################################存储relation变量
+# 将对象转换为字典列表
+data_to_save = []
+count = 0
+total = len(relations)
+for relation in relations:
+    data_to_save.append({
+        'from_co': relation.from_co.id,
+        'to_co': relation.to_co.id,
+        'start': relation.start.strftime("%Y-%m-%d"),  # 格式化为字符串
+        'end': relation.end.strftime("%Y-%m-%d"),  # 含时分秒
+        'status' :relation.status
+    })
+    print(f'已转换并保存 {count+1}/{total}')
+    count += 1
+ 
+################################################### 写入JSON文件
+with open(path_dic['save'] + 'supply_relations.json', 'w') as f:
+    json.dump(data_to_save, f, indent=4)
+print("数据已保存至 supply_relations.json")
+
+
+
+
+
+import json
+################################################## 读取JSON文件
+
+with open(path_dic['middle'] + '\\' + 'company.json', 'r') as f:
+    loaded_company_data = json.load(f)
+
+with open(path_dic['middle'] + '\\' + 'supply_relations.json', 'r') as f:
+    loaded_relation_data = json.load(f)
+
+#重建company对象
+companies = dict()
+count = 0
+for cop in loaded_company_data:
+    companies[cop['id']] = Company(cop['id'],cop['country'],cop['listed'])
+    # print(f'已解决{count+1}')
+    count+=1
+
+#重建relation对象
+count = 0
+restored_relations = []
+for rel in loaded_relation_data:
+    # 假设Company对象需要通过name或id重建
+    from_co = companies[rel['from_co']]  
+    to_co = companies[rel['to_co']]
+    
+    # 时间字符串转回datetime对象
+    start = datetime.strptime(rel['start'], "%Y-%m-%d")
+    end = datetime.strptime(rel['end'], "%Y-%m-%d")
+    
+    restored_relations.append(
+        SupplyRelation(from_co, to_co, start, end)
+    )
+    # print(f'已解决{count+1}')
+    count+=1
+
+
 
  # 初始化分析器
-analyzer = SupplyChainAnalyzer(relations, recovery_period=90,end_date=datetime(2021,1,1))
-
-# analyzer.graph
-for cop, cop_relation in analyzer.graph.items():
-        print(f"公司名字：{cop.id}")
-        for rel in cop_relation:
-            print(f"供应链关系：{rel}")
+analyzer = SupplyChainAnalyzer(restored_relations, recovery_period=90,end_date=datetime(2021,1,1))
+len(analyzer.graph)
+# # analyzer.graph
+# for cop, cop_relation in analyzer.graph.items():
+#         print(f"公司名字：{cop.id}")
+#         for rel in cop_relation:
+#             print(f"供应链关系：{rel}")
 # transfers = analyzer.detect_transfers()
 # transfers = analyzer.detect_transfers()
 # transfers
@@ -476,11 +539,12 @@ for cop, cop_relation in analyzer.graph.items():
 #             f"(间隔 {t['gap_days']} 天)")
 
 
-# 查找长度≥2的供应链
-chains = analyzer.find_supply_chains(min_length=2)
+# 查找长度≥1  <=10的供应链,先查找100个  （修改dfs算法，增加一层供应链含中量检测）
+chains = analyzer.find_supply_chains(min_length=1,max_depth=6,start_index=0,end_index=len(analyzer.graph))
 chains
-for chain in chains:
-    print([f"{rel.from_co.id}→{rel.to_co.id}" for rel in chain])
+len(chains)
+# for chain in chains:
+#     print([f"{rel.from_co.id}→{rel.to_co.id}" for rel in chain])
 # endregion
  
 
@@ -497,15 +561,6 @@ for chain in chains:
 #               f"(间隔 {t['gap_days']} 天)")
 
 # 验证供应链路径 -------------------------------------------------
-print("\n【完全供应链路径】")
-
-for i, chain in enumerate(chains):
-    print(chain)
-    for rel in chain:
-        print(type(rel))
-
-
-
 
  #接下来的步骤：
 '''
@@ -522,6 +577,12 @@ for i, chain in enumerate(chains):
 3.按初始节点分类，将路径信息添加到对应的列表中。 
 
  '''
+print("\n【完全供应链路径】")
+
+for i, chain in enumerate(chains):
+    print(chain)
+    for rel in chain:
+        print(type(rel))
 
 def find_path (chains):
     all_paths = []
