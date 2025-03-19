@@ -47,9 +47,6 @@ path_dic = {'foreign_data':r"C:\Users\Mocilly\Desktop\研创平台课题项目\�
     我们将非上市公司与上市公司的关联产业链纳入计算，如果关联产业链发生断裂，那么即意味着上市公司受到了贸易战冲击导致的间接产业链断裂效应
 '''
 
-
-
-
 # region 方法，类合集
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
@@ -208,7 +205,7 @@ class SupplyChainAnalyzer:
         count = 0
         for start_company in self.graph:
             internal_check = (count>= start_index) and (count < end_index)
-            #增加初始节点为中国公司的检验
+            #增加初始节点为中国公司的检验  （为限制关系数量，避免内存超载）
             is_cn = start_company.country == 'CN'
             if not internal_check or not is_cn:
                 count+=1
@@ -263,6 +260,8 @@ class SupplyChainAnalyzer:
     
 #endregion 方法，类合集
 
+
+# region 中间处理过程
 #获取供应链表
 base_dir = path_dic['foreign_data']
 # 获取当前目录下的所有文件
@@ -351,8 +350,11 @@ df_sc[df_sc['source_company_belong'].isna()]
 print(df_sc['end_'].head())  # 查看前几行数据
 print(df_sc['end_'].apply(type).value_counts())  # 统计元素类型
 df_sc[df_sc['end_'].isna()]
-Save('8.新算法_添加所属国家后的供应链关系表','xlsx',path_dic['save'],df_sc)
+Save('8.新算法_添加所属国家后的供应链关系表','xlsx',path_dic['middle'],df_sc)
 
+#endregion 中间处理过程 
+
+# region 中间处理过程_2
 #获取供应链表
 base_dir = path_dic['middle']
 # 获取当前目录下的所有文件
@@ -436,9 +438,6 @@ for from_co, to_co, start, end in sample_relations:
     count+=1
 
 
-
-
-
 import json
 
 
@@ -457,7 +456,7 @@ for key,cop in companies.items():
     count += 1
 
 ################################################### 写入JSON文件
-with open(path_dic['save'] + 'company.json', 'w') as f:
+with open(path_dic['middle'] + '\\' +'company.json', 'w') as f:
     json.dump(companies_to_save, f, indent=4)
 print("数据已保存至 company.json")
 
@@ -478,12 +477,12 @@ for relation in relations:
     count += 1
  
 ################################################### 写入JSON文件
-with open(path_dic['save'] + 'supply_relations.json', 'w') as f:
+with open(path_dic['middle'] + '\\' + 'supply_relations.json', 'w') as f:
     json.dump(data_to_save, f, indent=4)
 print("数据已保存至 supply_relations.json")
 
 
-
+#endregion 中间处理过程_2
 
 
 import json
@@ -538,11 +537,13 @@ len(analyzer.graph)
 #     print(f"{t['supplier']} 从 {t['from_client']} 转移到 {t['to_client']} "
 #             f"(间隔 {t['gap_days']} 天)")
 
-
+import math
 # 查找长度≥1  <=10的供应链,先查找100个  （修改dfs算法，增加一层供应链含中量检测）
-chains = analyzer.find_supply_chains(min_length=1,max_depth=6,start_index=0,end_index=len(analyzer.graph))
-chains
+chains = analyzer.find_supply_chains(min_length=1,max_depth=6,start_index=0,end_index=math.floor(len(analyzer.graph)/2))
+
 len(chains)
+
+# region 以下是需要执行两遍的代码，两个chains分别执行一遍，并记得更改最终形成的json文件名
 # for chain in chains:
 #     print([f"{rel.from_co.id}→{rel.to_co.id}" for rel in chain])
 # endregion
@@ -579,13 +580,14 @@ len(chains)
  '''
 print("\n【完全供应链路径】")
 
-for i, chain in enumerate(chains):
-    print(chain)
-    for rel in chain:
-        print(type(rel))
+# for i, chain in enumerate(chains):
+#     # print(chain)
+#     for rel in chain:
+#         # print(type(rel))
 
 def find_path (chains):
     all_paths = []
+    count = 0
     for i, chain in enumerate(chains, 1):
         path = []
         end_str = []
@@ -598,10 +600,13 @@ def find_path (chains):
         for r,rel in enumerate(chain):
             path.append(f"{rel.from_co.id}→"f"{rel.to_co.id}({rel.status})")
         all_paths.append(f"{" → ".join(path)}[{end_str[0]}]")
-
+        print(f'已解决{count+1}')
+        count+=1
     return all_paths
 all_chains = find_path(chains)
-all_chains
+
+len(all_chains)
+# all_chains
 
 
 import re
@@ -652,11 +657,13 @@ print(json.dumps(parsed_data, indent=2, ensure_ascii=False))
 
 
 # 保存文件
-with open(path_dic['save'] + 'supply_chains.json', 'w', encoding='utf-8') as f:
+with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', 'w', encoding='utf-8') as f:
     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
- 
+#endregion 以下是需要执行两遍的代码，两个chains分别执行一遍，并记得更改最终形成的json文件名
+
+
 # 读取数据
-with open(path_dic['save'] + 'supply_chains.json', encoding='utf-8') as f:
+with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', encoding='utf-8') as f:
     loaded_data = json.load(f)
 
 
