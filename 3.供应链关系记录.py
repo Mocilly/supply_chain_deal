@@ -51,6 +51,7 @@ path_dic = {'foreign_data':r"C:\Users\Mocilly\Desktop\研创平台课题项目\�
 #endregion -----7.1 将新建的断裂指标添加到上市公司数据中_ 新计算方法(关联产业链破裂也算作break计入上市公司)
 
 
+# region 方法，类合集
 from datetime import datetime, timedelta
 from typing import List, Dict, Optional
 from collections import defaultdict
