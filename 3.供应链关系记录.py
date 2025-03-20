@@ -37,9 +37,6 @@ path_dic = {'foreign_data':r"C:\Users\Mocilly\Desktop\研创平台课题项目\�
 
 #endregion 
 
-
-
-
 # 7.1 将新建的断裂指标添加到上市公司数据中_ 新计算方法(关联产业链破裂也算作break计入上市公司)
 '''新计算方法说明:
     考虑到上市公司的安全性资金较为充裕，因此在贸易战期间其产业链不太可能会发生断裂。
@@ -86,6 +83,15 @@ class SupplyRelation:
 
     def __repr__(self):
         return f"<Relation {self.from_co.id}→{self.to_co.id} ({self.status})>"
+    # 重写相等性判断
+    def __eq__(self, other):
+        return (self.from_co == other.from_co and 
+                self.to_co == other.to_co and
+                self.status == other.status)
+    
+    # 生成哈希值用于集合去重
+    def __hash__(self):
+        return hash((self.from_co, self.to_co, self.status))
 
 class SupplyChainAnalyzer:
     """增强型供应链分析器"""
@@ -154,6 +160,24 @@ class SupplyChainAnalyzer:
 
                     # print('----------------------------------------')
 
+    def filter_duplicate_chains(self,chains: List[List[SupplyRelation]]) -> List[List[SupplyRelation]]:
+    # 按路径长度降序排列
+        sorted_chains = sorted(chains, key=lambda x: len(x), reverse=True)
+        
+        seen_relations = set()
+        filtered_chains = []
+        
+        for chain in sorted_chains:
+            # 提取路径中的所有关系
+            relations_in_chain = set(chain)
+            
+            # 检查是否存在新关系
+            if not relations_in_chain.issubset(seen_relations):
+                filtered_chains.append(chain)
+                seen_relations.update(relations_in_chain)
+        
+        return filtered_chains
+
 
 
 #深度优先算法无法查找到成圈层状的供应链关系，这是该算法的缺陷所在
@@ -219,11 +243,9 @@ class SupplyChainAnalyzer:
                     initial_rel.end)
             print(f'已解决第{count+1}个')
             count+=1
-        return valid_chains 
+        return self.filter_duplicate_chains(valid_chains) 
 
-
-
-
+    
     # def detect_transfers(self) -> List[Dict]:
     #     """优化后的产业转移检测"""
     #     transfers = []
@@ -539,8 +561,15 @@ len(analyzer.graph)
 
 import math
 # 查找长度≥1  <=10的供应链,先查找100个  （修改dfs算法，增加一层供应链含中量检测）
-chains = analyzer.find_supply_chains(min_length=1,max_depth=6,start_index=0,end_index=math.floor(len(analyzer.graph)/2))
-
+# chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=0,end_index=math.floor(len(analyzer.graph)/3))
+# chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=math.floor(len(analyzer.graph)/3),end_index=math.floor(len(analyzer.graph)/3*2))
+chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=math.floor(len(analyzer.graph)/3*2),end_index=len(analyzer.graph)+1)
+count = 0 
+for chain in chains:
+    print(chain)
+    if count >50:
+        break
+    count+=1
 len(chains)
 
 # region 以下是需要执行两遍的代码，两个chains分别执行一遍，并记得更改最终形成的json文件名
@@ -576,8 +605,8 @@ len(chains)
 存储到数据结构：
 
 3.按初始节点分类，将路径信息添加到对应的列表中。 
+'''
 
- '''
 print("\n【完全供应链路径】")
 
 # for i, chain in enumerate(chains):
@@ -600,7 +629,7 @@ def find_path (chains):
         for r,rel in enumerate(chain):
             path.append(f"{rel.from_co.id}→"f"{rel.to_co.id}({rel.status})")
         all_paths.append(f"{" → ".join(path)}[{end_str[0]}]")
-        print(f'已解决{count+1}')
+        # print(f'已解决{count+1}')
         count+=1
     return all_paths
 all_chains = find_path(chains)
@@ -653,11 +682,15 @@ parsed_data = parse_paths(all_chains)
 
 # 示例输出查看
 import json
-print(json.dumps(parsed_data, indent=2, ensure_ascii=False))
+
 
 
 # 保存文件
-with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', 'w', encoding='utf-8') as f:
+# with open(path_dic['middle'] + '\\' +'complete_supply_chains_1.json', 'w', encoding='utf-8') as f:
+#     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
+# with open(path_dic['middle'] + '\\' +'complete_supply_chains_2.json', 'w', encoding='utf-8') as f:
+#     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
+with open(path_dic['middle'] + '\\' +'complete_supply_chains_3.json', 'w', encoding='utf-8') as f:
     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
 #endregion 以下是需要执行两遍的代码，两个chains分别执行一遍，并记得更改最终形成的json文件名
 
