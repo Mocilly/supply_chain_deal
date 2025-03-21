@@ -342,8 +342,9 @@ for node in initial_nodes:
     else:
         initial_nodes.pop()
 len(initial_nodes)
-# print("所有初始节点:", initial_nodes)
-initial_nodes_dict = dict.fromkeys(initial_nodes,[False,None]) #第一个参数检验是否断裂，第二个参数检验将股票代码涵盖进去
+
+# print("所有初始节点:", initial_nodes)  #警告 此处有着 列表浅引用的陷阱，用dict.fromkeys会导致所有引用转向同一列表
+initial_nodes_dict = {key: [False, None] for key in initial_nodes} #第一个参数检验是否断裂，第二个参数检验将股票代码涵盖进去
 len(initial_nodes_dict)
 # 2. 获取指定初始节点的所有路径
 def get_paths_by_initial(initial_node):
@@ -386,11 +387,12 @@ for initial_node in initial_nodes:  #逻辑： 有一个产业链断裂就判定
             if node['status'] == 'permanent_break':
                 cn_cop_break_set.add(initial_node)
                 break
-    print(1)
+
 len(cn_cop_break_set)
-for node in cn_cop_break_set:
+for node in list(cn_cop_break_set):
     if node in initial_nodes_dict:
         initial_nodes_dict[node][0] = True
+
 df.columns
 initial_nodes_dict
 count = 0
@@ -417,11 +419,12 @@ for key,value in initial_nodes_dict.items():
     count+=1
 
 initial_nodes_dict
+
 count=0
 for key,value in initial_nodes_dict.items():
-    print(value)
-    if value[0] ==False:
-        
+    # print(value)
+    if initial_nodes_dict[key][0] ==False:
+        print(key)
         count+=1
         
 print(count) 
