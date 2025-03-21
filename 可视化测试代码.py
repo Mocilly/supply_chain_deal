@@ -297,19 +297,43 @@ for cop in loaded_company_data:
 # 读取数据
 with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', encoding='utf-8') as f:
     loaded_data = json.load(f)
-# 生成测试数据（包含多层级永久断裂案例）
-path_lines = [
-    # 三级永久断裂链条（中国→印度→法国→英国）
-    "S1→C4(permanent_break) → C4→C5(permanent_break) → C5→C6(permanent_break)",
-    # 二级永久断裂链条（中国→美国→德国）
-    "S2→C1(permanent_break) → C1→C2(permanent_break)",
-    # 单层转移案例
-    "S3→C3(transfer)",
-    # 混合状态案例
-    "S1→C2(permanent_break) → C2→C5(transfer) → C5→C6(recovered)",
-    # 恢复案例
-    "S2→C5(recovered)",
-]
+
+# 转换数据结构：生成类似 path_lines 的供应链路径描述
+path_lines = []
+ 
+# 遍历每个初始节点（例如 S1, S2, S3）
+for initial_node, chains in loaded_data.items():
+    # 遍历该初始节点下的所有供应链链条
+    for chain in chains:
+        path_segments = []
+        nodes = chain.get('path', [])
+        final_status = chain.get('final_status', '')
+        # 遍历节点，生成连续的边（source→target）
+        for i in range(len(nodes) - 1):
+            source = nodes[i]['name']
+            target = nodes[i + 1]['name']
+            status = nodes[i + 1]['status']  # 使用目标节点的状态作为边的状态
+            # 关键改进：过滤 source == target 的边
+            if source == target:
+                continue  # 跳过两端相同的边
+            # 处理状态显示逻辑
+            if status and status.lower() != 'none':
+                segment = f"{source}→{target}({status})"
+            else:
+                segment = f"{source}→{target}"
+            
+            path_segments.append(segment)
+        # 添加最终状态（可选）
+        # if final_status:
+        #     path_segments.append(f"[最终状态: {final_status}]")
+        
+        # 拼接完整路径
+        if path_segments:
+            full_path = " → ".join(path_segments)
+            path_lines.append(full_path)
+
+
+
 
 # 公司-国家映射表（所有S开头公司属于中国）
 company_to_country = {
