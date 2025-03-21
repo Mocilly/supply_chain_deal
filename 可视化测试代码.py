@@ -113,29 +113,34 @@ def create_map_figure(status_data):
         'transfer': 'rgb(50,180,50)',
         'recovered': 'rgb(50,50,230)'
     }
-
-    # 国家节点增强显示
+	  # 修正后的国家标签配置
     country_trace = go.Scattergeo(
         lon=[c[0] for c in country_coords.values()],
         lat=[c[1] for c in country_coords.values()],
-        mode='markers+text',
-        marker=dict(
-            size=18,
-            color='rgba(30,30,30,0.9)',
-            line=dict(width=1, color='white')
-        ),
+        mode='text',
         text=[f"<b>{k}</b>" for k in country_coords],
         textfont=dict(
-            color='rgba(255,255,255,0.9)',
-            family='Arial Black',
-            size=11
+            color='#FFA500',
+            family="Arial Black",
+            size=17
         ),
-        textposition='top center',
-        hoverinfo='text',
+        textposition=[
+            # 使用Plotly官方支持的参数值
+            'middle right' if country == "China" else      # 中国
+            'bottom left' if country == "USA" else       # 美国
+            'bottom center' if country == "Germany" else # 德国
+            'middle center' if country == "Japan" else        # 日本
+            'middle center' if country == "India" else    # 印度（修正这里）
+            'middle right' if country == "France" else     # 法国（修正这里）
+            'bottom center'                                # 英国
+            for country in country_coords
+        ],
+        hoverinfo='none',
         showlegend=False,
         meta={'status': 'base'}
     )
     traces.append(country_trace)
+
 
     # 生成状态轨迹
     for status in ['permanent_break', 'transfer', 'recovered']:
@@ -172,22 +177,40 @@ def create_map_figure(status_data):
                 meta={'status': status}
             ))
 
-    # 交互控件优化
+     # 修正可见性控制逻辑
     buttons = []
     visible_states = ['permanent_break', 'transfer', 'recovered']
     for status in visible_states:
         visible = [
-            (t.meta.get('status') == status) if 'meta' in t 
-            else (status == 'permanent_break')  # 默认显示第一个状态
+            (t.meta.get('status') == status) if 'meta' in t and t.meta.get('status') != 'base' 
+            else True  # 确保国家标签始终可见
             for t in traces
         ]
         buttons.append(dict(
             label=f"{status.capitalize()}状态",
             method='update',
-            args=[{'visible': visible}],
-            execute=True
+            args=[{'visible': visible}]
         ))
+    
+    geo_config = dict(
+        resolution=50,  # 降低地图分辨率
+        showcountries=True,
+        countrycolor='rgb(100,100,100)',  # 使用灰色替代纯黑
+        countrywidth=0.8,  # 更细的国家边界
+        showcoastlines=True,
+        coastlinecolor='rgb(80,80,80)',  # 更柔和的颜色
+        coastlinewidth=0.1,  # 更细的海岸线
+        showlakes=False,  # 隐藏湖泊
+        showrivers=False,  # 隐藏河流
+        showframe=False,  # 隐藏地图边框
+        showsubunits=False, # 关键参数：隐藏次级行政区划（包括小岛）❗
+        subunitwidth=0,     # 彻底隐藏次级边界
+        landcolor="rgb(245,245,220)",  # 米色陆地
+        oceancolor="rgb(173,216,230)",  # 浅蓝色海洋
+        projection_type="natural earth"  # 使用简化投影
 
+    )
+    
     fig = go.Figure(data=traces)
     fig.update_layout(
         title_text='全球供应链状态分析系统',
@@ -200,18 +223,14 @@ def create_map_figure(status_data):
             xanchor='left',
             y=1.15
         )],
-        geo=dict(
-            resolution=110,
-            showframe=True,
-            showcoastlines=True,
-            coastlinecolor='rgb(100,100,100)',
-            landcolor='rgb(245,245,240)',
-            oceancolor='rgb(220,240,255)'
-        ),
+        geo=geo_config,
+        plot_bgcolor='rgba(255,255,255,0.9)',  # 画布背景色
         height=750,
         margin=dict(l=0, r=0, t=90, b=0)
     )
+
     return fig
+
 
 def get_layer(w):
     """权重值转中文层级"""
