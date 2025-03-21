@@ -284,6 +284,18 @@ class SupplyChainAnalyzer:
 #endregion 方法，类合集
 
 
+base_dir = path_dic['middle']
+# 获取当前目录下的所有文件
+files = [os.path.join(base_dir, file) for file in os.listdir(base_dir)]
+files
+for index,file in enumerate(files):
+    print(f'索引 {index}： {file}')
+files[7]
+df_sc = pd.read_excel(files[7],dtype={'source_company_id':str,'target_company_id':str,
+                                              'SOURCE_ticker':str,'TARGET_ticker':str}) 
+
+df = df_sc[['source_company_id','target_company_id','SOURCE_ticker','TARGET_ticker']]
+
 # region 存储数据的读取和后续查询操作原理
 import json
 ################################################## 读取JSON文件
@@ -320,15 +332,109 @@ for key,value in loaded_data.items():
 
 # 1. 获取所有初始节点
 initial_nodes = list(loaded_data.keys())
+
+initial_nodes
+len(initial_nodes)
+count=0
+for node in initial_nodes:
+    if companies[node].country == 'CN':
+        continue
+    else:
+        initial_nodes.pop()
+len(initial_nodes)
 # print("所有初始节点:", initial_nodes)
- 
+initial_nodes_dict = dict.fromkeys(initial_nodes,[False,None]) #第一个参数检验是否断裂，第二个参数检验将股票代码涵盖进去
+len(initial_nodes_dict)
 # 2. 获取指定初始节点的所有路径
 def get_paths_by_initial(initial_node):
     return loaded_data.get(initial_node, [])
- 
-s3_paths = get_paths_by_initial('117591775')
-s3_paths
-len(s3_paths)
+s = get_paths_by_initial('3554')
+s[23]
+#先统计初始节点以外的节点断裂情况
+cn_cop = []
+for initial_node in initial_nodes:
+    chains = get_paths_by_initial(initial_node)
+    for chain in chains:
+        final_status = chain['final_status']
+        path = chain['path']
+        
+        flag = False
+        for i,node in enumerate(path):
+            name = node['name']
+            if name in initial_nodes_dict:
+                cn_cop.append(name)
+                flag = True
+                if node['status'] == 'permanent_break':  #如果当天节点就是中国公司且状态为断裂，则无需进行后续检查处理，直接下一节点
+                    flag = False
+                continue
+            if flag:
+                if node['status'] == 'permanent_break' or final_status == 'limit_day_break':
+                    flag = False
+                    continue
+                elif i == len(path)-1:
+                    cn_cop.pop()
+cn_cop_break_set = set(cn_cop)
+
+#再统计初始节点断裂情况
+for initial_node in initial_nodes:  #逻辑： 有一个产业链断裂就判定为初始节点断裂
+    chains = get_paths_by_initial(initial_node)
+    for chain in chains:
+        final_status = chain['final_status']
+        path = chain['path']
+
+        for i,node in enumerate(path):
+            if node['status'] == 'permanent_break':
+                cn_cop_break_set.add(initial_node)
+                break
+    print(1)
+len(cn_cop_break_set)
+for node in cn_cop_break_set:
+    if node in initial_nodes_dict:
+        initial_nodes_dict[node][0] = True
+df.columns
+initial_nodes_dict
+count = 0
+len_initial_nodes_dict = len(initial_nodes_dict)
+multi_ticker = []
+for key,value in initial_nodes_dict.items():
+    ticker_set = set()
+    # 收集 TARGET_ticker
+    target_mask = df['target_company_id'] == key
+    if target_mask.any():
+        target_tickers = df.loc[target_mask, 'TARGET_ticker'].unique()
+        ticker_set.update(target_tickers)
+    
+    # 收集 SOURCE_ticker
+    source_mask = df['source_company_id'] == key
+    if source_mask.any():
+        source_tickers = df.loc[source_mask, 'SOURCE_ticker'].unique()
+        ticker_set.update(source_tickers)
+    if len(ticker_set) == 1:
+        value[1] = ticker_set.pop()
+    else:
+        multi_ticker.append([key,list(ticker_set)])
+    print(f"已解决{count+1}/{len_initial_nodes_dict}")
+    count+=1
+
+initial_nodes_dict
+count=0
+for key,value in initial_nodes_dict.items():
+    print(value)
+    if value[0] ==False:
+        
+        count+=1
+        
+print(count) 
+    
+
+
+
+
+
+
+
+
+
 #输出结果演示，如何读取相应的内容
 for path in s3_paths:
     print(path['path'])
@@ -352,6 +458,8 @@ def find_paths_containing_node(target_node):
 c4_paths = find_paths_containing_node('117591775')
 c4_paths
 print(f"找到 {len(c4_paths)} 条包含 117591775 的路径")
+
+
 
 
 	# 4. 查找特定状态模式的路径
