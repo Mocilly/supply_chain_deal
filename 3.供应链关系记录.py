@@ -91,7 +91,7 @@ class SupplyRelation:
     
     # 生成哈希值用于集合去重
     def __hash__(self):
-        return hash((self.from_co, self.to_co, self.status))
+        return hash((self.from_co, self.to_co,self.start,self.end,self.status))
 
 class SupplyChainAnalyzer:
     """增强型供应链分析器"""
@@ -229,9 +229,10 @@ class SupplyChainAnalyzer:
         count = 0
         for start_company in self.graph:
             internal_check = (count>= start_index) and (count < end_index)
-            #增加初始节点为中国公司的检验  （为限制关系数量，避免内存超载）
-            is_cn = start_company.country == 'CN'
-            if not internal_check or not is_cn:
+            #增加初始节点为中国公司的检验  （为限制关系数量，避免内存超载） (删除测试)
+            # is_cn = start_company.country == 'CN'
+            # if not internal_check or not is_cn:
+            if not internal_check :
                 count+=1
                 print(f'已跳过第{count+1}个')
                 continue
@@ -448,9 +449,6 @@ for i in df_sc.index:
 
 
 
-
-
-
 relations = []
 count = 0
 len_sample_relations = len(sample_relations)
@@ -559,11 +557,12 @@ len(analyzer.graph)
 #     print(f"{t['supplier']} 从 {t['from_client']} 转移到 {t['to_client']} "
 #             f"(间隔 {t['gap_days']} 天)")
 
-import math
+
 # 查找长度≥1  <=10的供应链,先查找100个  （修改dfs算法，增加一层供应链含中量检测）
+chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=0,end_index=len(analyzer.graph)+1)
 # chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=0,end_index=math.floor(len(analyzer.graph)/3))
 # chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=math.floor(len(analyzer.graph)/3),end_index=math.floor(len(analyzer.graph)/3*2))
-chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=math.floor(len(analyzer.graph)/3*2),end_index=len(analyzer.graph)+1)
+# chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=math.floor(len(analyzer.graph)/3*2),end_index=len(analyzer.graph)+1)
 count = 0 
 for chain in chains:
     print(chain)
@@ -577,18 +576,6 @@ len(chains)
 #     print([f"{rel.from_co.id}→{rel.to_co.id}" for rel in chain])
 # endregion
  
-
-
-
-# for rel in relations:
-#     status_map = {rel: rel.status}
-#     for rel, status in status_map.items():
-#         print(f"{rel.from_co.id}→{rel.to_co.id} {rel.start.date()}--{rel.end.date()}: {status}")
-#     print("\n【产业转移检测】")
-#     transfers = analyzer.detect_transfers()
-#     for t in transfers:
-#         print(f"{t['supplier']} 从 {t['from_client']} 转移到 {t['to_client']} "
-#               f"(间隔 {t['gap_days']} 天)")
 
 # 验证供应链路径 -------------------------------------------------
 
@@ -679,37 +666,81 @@ def parse_paths(path_lines):
 
 # 解析并存储数据
 parsed_data = parse_paths(all_chains)
-
+len(parsed_data)
 # 示例输出查看
 import json
 
-
+# # 数据结构测试
+# count = 0
+# for key,value in parsed_data.items():
+#     print(key)
+#     print(value)
+#     for rel in value:
+#     #     # print(f"链条情况: {rel}")
+#         print(f'{rel}')
+    
+#     if count>1:
+#         break
+#     count+=1
 
 # 保存文件
+with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', 'w', encoding='utf-8') as f:
+    json.dump(parsed_data, f, indent=2, ensure_ascii=False)
 # with open(path_dic['middle'] + '\\' +'complete_supply_chains_1.json', 'w', encoding='utf-8') as f:
 #     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
 # with open(path_dic['middle'] + '\\' +'complete_supply_chains_2.json', 'w', encoding='utf-8') as f:
 #     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
-with open(path_dic['middle'] + '\\' +'complete_supply_chains_3.json', 'w', encoding='utf-8') as f:
-    json.dump(parsed_data, f, indent=2, ensure_ascii=False)
+# with open(path_dic['middle'] + '\\' +'complete_supply_chains_3.json', 'w', encoding='utf-8') as f:
+#     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
 #endregion 以下是需要执行两遍的代码，两个chains分别执行一遍，并记得更改最终形成的json文件名
+
+
+
+# region 存储数据的读取和后续查询操作原理
+import json
+################################################## 读取JSON文件
+
+with open(path_dic['middle'] + '\\' + 'company.json', 'r') as f:
+    loaded_company_data = json.load(f)
+
+#重建company对象
+companies = dict()
+count = 0
+for cop in loaded_company_data:
+    companies[cop['id']] = Company(cop['id'],cop['country'],cop['listed'])
+    # print(f'已解决{count+1}')
+    count+=1
 
 
 # 读取数据
 with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', encoding='utf-8') as f:
     loaded_data = json.load(f)
 
+# 数据结构测试
+count = 0
+for key,value in loaded_data.items():
+    print(key)
+    for rel in value:
+        # print(f"链条情况: {rel}")
+        print(f'具体链条情况：{rel}')
+    if count>1:
+        break
+    count+=1
+
+
+
 
 # 1. 获取所有初始节点
 initial_nodes = list(loaded_data.keys())
-print("所有初始节点:", initial_nodes)
+# print("所有初始节点:", initial_nodes)
  
 # 2. 获取指定初始节点的所有路径
 def get_paths_by_initial(initial_node):
     return loaded_data.get(initial_node, [])
  
-s3_paths = get_paths_by_initial('S3')
-
+s3_paths = get_paths_by_initial('117591775')
+s3_paths
+len(s3_paths)
 #输出结果演示，如何读取相应的内容
 for path in s3_paths:
     print(path['path'])
@@ -720,45 +751,57 @@ for path in s3_paths:
 def find_paths_containing_node(target_node):
     results = []
     for initial, paths in loaded_data.items():
-        for path in paths:
-            nodes_in_path = [node['name'] for node in path['path']]
-            if target_node in nodes_in_path:
+        for chain in paths:
+            nodes_in_chain = [node['name'] for node in chain['path']]
+            if target_node in nodes_in_chain:
                 results.append({
                     "initial": initial,
-                    "path": path['path'],
-                    "final_status": path['final_status']
+                    "path": chain['path'],
+                    "final_status": chain['final_status']
                 })
     return results
  
-c4_paths = find_paths_containing_node('C4')
+c4_paths = find_paths_containing_node('117591775')
 c4_paths
-print(f"找到 {len(c4_paths)} 条包含 C4 的路径")
+print(f"找到 {len(c4_paths)} 条包含 117591775 的路径")
 
 
 	# 4. 查找特定状态模式的路径
-def find_by_status(pattern):
-    return [path for paths in loaded_data.values() for path in paths 
-            if re.search(pattern, path['final_status'])]
+
+def find_by_status(data,pattern):
+    count=0
+    find_path = []
+    for initial_node,chains in data.items():
+        initial_list = []
+        initial_list.append(initial_node)
+        for chain in chains:
+            flag = False
+        
+            path = chain['path'] 
+            for node in path:
+                if node['status'] == pattern:
+                    initial_list.append(chain)
+                    flag = True 
+                    count+=1
+                    break
+            if flag:
+                count-=1
+                break
+
+        find_path.append(initial_list)
+    print(f'count:{count}')
+    return find_path
+
+len(loaded_data)
+limit_paths = find_by_status(loaded_data,'permanent_break')
+
+count=0
+for path in limit_paths:
+    print(path)
+    if count>50:
+        break
+    count+=1
+
+print(f"找到 {len(limit_paths)} 条包含路径")
  
-limit_paths = find_by_status(r'limit_day')
-print(f"找到 {len(limit_paths)} 条限制类路径")
- 
-# 5. 可视化路径关系
-import networkx as nx
-import matplotlib.pyplot as plt
- 
-def visualize_paths(initial_node):
-    G = nx.DiGraph()
-    paths = get_paths_by_initial(initial_node)
-    
-    for path in paths:
-        nodes = [initial_node] + [n['name'] for n in path['path']]
-        for i in range(len(nodes)-1):
-            G.add_edge(nodes[i], nodes[i+1])
-    
-    pos = nx.spring_layout(G)
-    nx.draw(G, pos, with_labels=True, node_color='lightblue')
-    plt.title(f"{initial_node} 的产业链关系")
-    plt.show()
- 
-visualize_paths('S3')
+#endregion 存储数据的读取和后续查询操作原理

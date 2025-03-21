@@ -1,174 +1,225 @@
-# region ######################################################  开始必备执行代码   
-import os
-
-import numpy as np
+# region ###################################################### 核心代码 
+import re
 import pandas as pd
-from datetime import datetime
-from typing import List, Dict
+import plotly.graph_objects as go
 from collections import defaultdict
 
-
-# pd.options.display.max_rows = 10000  # 终端显示10000行
-
-
-def Save(fileName,path,df):
-    #.将上面的df保存为xlsx表格
-    fileName = fileName+'.xlsx'
-    savePath = ''.join([path,fileName])
-    wr = pd.ExcelWriter(savePath)#输入即将导出数据所在的路径并指定好Excel工作簿的名称
-    df.to_excel(wr, index = False)
-
-    wr._save()
-
-
-
-# 路径集合#
-path_dic = {'foreign_data':r"C:\Users\Mocilly\Desktop\研创平台课题项目\数据\factset\data",
-            'cop_data':r'C:\Users\Mocilly\Desktop\研创平台课题项目\数据\上市公司数据',
-            'middle':r'C:\Users\Mocilly\Desktop\研创平台课题项目\数据\中间文件',
-            'save':r'C:/Users/Mocilly/Desktop/研创平台课题项目/数据//',
-            }
-
-#endregion 
-
-
-# 示例数据输入
+# 生成测试数据（包含多层级永久断裂案例）
 path_lines = [
-    "S1→C1(permanent_break)[limit_day_break]",
-    "S1→C1(permanent_break)[limit_day_break]",
-    "S1→C2(permanent_break)[beyond_day_continue]",
-    "S1→C3(transfer)[beyond_day_continue]",
-    "S2→C2(active)[limit_day_break]",
-    "S2→C2(recovered)[limit_day_break]",
-    "S3→C4(active)[limit_day_break]",
-    "S3→C4(active) → C4→C5(active)[limit_day_break]",
-    "S3→C4(active) → C4→C5(active) → C5→C6(active)[limit_day_break]",
-    "C4→C5(active)[limit_day_break]",
-    "C4→C5(active) → C5→C6(active)[limit_day_break]",
-    "C5→C6(active)[limit_day_break]",
-    # 其他路径...
+    # 三级永久断裂链条（中国→印度→法国→英国）
+    "S1→C4(permanent_break) → C4→C5(permanent_break) → C5→C6(permanent_break)",
+    # 二级永久断裂链条（中国→美国→德国）
+    "S2→C1(permanent_break) → C1→C2(permanent_break)",
+    # 单层转移案例
+    "S3→C3(transfer)",
+    # 混合状态案例
+    "S1→C2(permanent_break) → C2→C5(transfer) → C5→C6(recovered)",
+    # 恢复案例
+    "S2→C5(recovered)",
 ]
-# 公司到国家的映射（需根据实际数据补充）
+
+# 公司-国家映射表（所有S开头公司属于中国）
 company_to_country = {
-    "S1": "China", "C1": "USA",
-    "S2": "Germany", "C2": "France",
-    "S3": "Japan", "C3": "South Korea",
-    "C4": "India", "C5": "Italy", "C6": "UK"
+    **{f"S{i}": "China" for i in range(1,4)},  # S1-S3均来自中国
+    "C1": "USA", "C2": "Germany", "C3": "Japan",
+    "C4": "India", "C5": "France", "C6": "UK"
 }
 
-import re
-import plotly.graph_objects as go
-
-# 预设国家坐标（示例数据，实际需要更精确）
+# 国家地理坐标（经度，纬度）
 country_coords = {
     "China": [104.1954, 35.8617],
     "USA": [-95.7129, 37.0902],
     "Germany": [10.4515, 51.1657],
-    "France": [2.2137, 46.2276],
     "Japan": [138.2529, 36.2048],
-    "South Korea": [127.7669, 35.9078],
     "India": [78.9629, 20.5937],
-    "Italy": [12.5674, 41.8719],
+    "France": [2.2137, 46.2276],
     "UK": [-3.43597, 55.3781]
 }
 
-# 解析产业链数据
-connections = []
-for line in path_lines:
-    segments = line.split(' → ')
-    current_color = 'blue'  # 默认颜色
-    for seg in segments:
-        match = re.match(r'(\w+)→(\w+)\((.*?)\)', seg)
-        if not match: continue
+# region ###################################################### 统计逻辑实现
+def analyze_paths(path_lines):
+    """
+    供应链状态分析函数
+    
+    功能：
+    1. 永久断裂(permanent_break)处理逻辑：
+       - 跟踪从中国开始的连续断裂链条
+       - 按层级加权（第1层x1，第2层x0.5，第3层x0.1）
+    2. 转移(transfer)/恢复(recovered)处理逻辑：
+       - 仅统计中国直接发起的单个状态变化
+    """
+    status_records = {
+        'permanent_break': defaultdict(float),
+        'transfer': defaultdict(float),
+        'recovered': defaultdict(float)
+    }
+
+    for path in path_lines:
+        # 分解路径为独立段（忽略时间标记）
+        segments = []
+        for seg in path.split(' → '):
+            if match := re.match(r'(\w+)→(\w+)\((\w+)\)', seg.split('[')[0]):
+                segments.append(match.groups())
+
+        current_chain = None  # 跟踪当前断裂链条状态
+
+        for start_comp, end_comp, status in segments:
+            start_country = company_to_country.get(start_comp)
+            end_country = company_to_country.get(end_comp)
+            
+            # 处理永久断裂状态
+            if status == 'permanent_break':
+                if current_chain:  # 延续现有链条
+                    layer = current_chain['layer'] + 1
+                    weight = 1.0 if layer == 1 else 0.5 if layer == 2 else 0.1
+                    current_chain['layer'] = layer
+                else:  # 新链条必须起始于中国
+                    if start_country == 'China':
+                        layer = 1
+                        weight = 1.0
+                        current_chain = {'layer': layer}
+                    else:
+                        continue  # 非中国起始的断裂不统计
+                
+                # 记录国家间断裂关系及加权值
+                status_records['permanent_break'][(start_country, end_country)] += weight
+            
+            # 处理转移/恢复状态（仅中国直接发起）
+            elif start_country == 'China':
+                if status == 'transfer':
+                    status_records['transfer'][(start_country, end_country)] += 1.0
+                elif status == 'recovered':
+                    status_records['recovered'][(start_country, end_country)] += 1.0
+                
+                # 状态变化中断永久断裂链条
+                current_chain = None
+            
+            # 非永久断裂状态中断链条
+            else:
+                current_chain = None
+
+    return status_records
+
+status_data = analyze_paths(path_lines)
+# endregion
+
+# endregion
+# endregion
+def create_map_figure(status_data):
+    traces = []
+    max_line_width = 15
+    color_mapping = {
+        'permanent_break': 'rgb(230,50,50)',
+        'transfer': 'rgb(50,180,50)',
+        'recovered': 'rgb(50,50,230)'
+    }
+
+    # 国家节点增强显示
+    country_trace = go.Scattergeo(
+        lon=[c[0] for c in country_coords.values()],
+        lat=[c[1] for c in country_coords.values()],
+        mode='markers+text',
+        marker=dict(
+            size=18,
+            color='rgba(30,30,30,0.9)',
+            line=dict(width=1, color='white')
+        ),
+        text=[f"<b>{k}</b>" for k in country_coords],
+        textfont=dict(
+            color='rgba(255,255,255,0.9)',
+            family='Arial Black',
+            size=11
+        ),
+        textposition='top center',
+        hoverinfo='text',
+        showlegend=False,
+        meta={'status': 'base'}
+    )
+    traces.append(country_trace)
+
+    # 生成状态轨迹
+    for status in ['permanent_break', 'transfer', 'recovered']:
+        data = status_data[status]
+        if not data:
+            continue
+            
+        max_weight = max(data.values(), default=1)
         
-        start_comp, end_comp, status = match.groups()
-        start_country = company_to_country.get(start_comp)
-        end_country = company_to_country.get(end_comp)
-        
-        if not start_country or not end_country: continue
+        for (start, end), weight in data.items():
+            # 坐标验证
+            start_coord = country_coords.get(start, [None, None])
+            end_coord = country_coords.get(end, [None, None])
+            if None in start_coord + end_coord:
+                continue
+                
+            # 动态线宽
+            line_width = (weight / max_weight) * max_line_width
+            line_width = max(min(line_width, 15), 1.5)
+            
+            traces.append(go.Scattergeo(
+                lon=[start_coord[0], end_coord[0], None],
+                lat=[start_coord[1], end_coord[1], None],
+                mode='lines',
+                line=dict(
+                    width=line_width,
+                    color=color_mapping[status],
+                    dash='dash' if status == 'permanent_break' else 'solid'
+                ),
+                opacity=0.85,
+                hoverinfo='text',
+                hovertext=f"{start}→{end}<br>辐射层级：{get_layer(weight)}<br>权重：{weight:.2f}",
+                visible=(status == 'permanent_break'),
+                meta={'status': status}
+            ))
 
-        # 确定线条样式
-        line_style = 'solid'
-        color = current_color
-        
-        if 'permanent_break' in status:
-            line_style = 'dash'
-        if 'transfer' in status:
-            color = 'red'
-            current_color = 'red'  # 影响后续链条
-        
-        connections.append({
-            'start': start_country,
-            'end': end_country,
-            'color': color,
-            'style': line_style
-        })
-
-
-
-# 创建可视化轨迹
-traces = []
-
-# 先添加虚线轨迹（保证绘制顺序）
-for line_style in ['dash', 'solid']:
-    for color in ['blue', 'red']:
-        line_segments = [
-            c for c in connections 
-            if c['style'] == line_style and c['color'] == color
+    # 交互控件优化
+    buttons = []
+    visible_states = ['permanent_break', 'transfer', 'recovered']
+    for status in visible_states:
+        visible = [
+            (t.meta.get('status') == status) if 'meta' in t 
+            else (status == 'permanent_break')  # 默认显示第一个状态
+            for t in traces
         ]
-        
-        if not line_segments: continue
-        
-        lons, lats = [], []
-        for conn in line_segments:
-            start = country_coords[conn['start']]
-            end = country_coords[conn['end']]
-            lons += [start[0], end[0], None]
-            lats += [start[1], end[1], None]
-        
-        traces.append(go.Scattergeo(
-            lon = lons,
-            lat = lats,
-            mode = 'lines',
-            line = dict(width=1.5, color=color, dash=line_style),
-            hoverinfo='none',
-            showlegend=False
+        buttons.append(dict(
+            label=f"{status.capitalize()}状态",
+            method='update',
+            args=[{'visible': visible}],
+            execute=True
         ))
 
-# 添加国家节点
-country_trace = go.Scattergeo(
-    lon = [c[0] for c in country_coords.values()],
-    lat = [c[1] for c in country_coords.values()],
-    mode = 'markers+text',
-    marker = dict(size=12, color='black'),
-    text = list(country_coords.keys()),
-    textposition = 'top center',
-    hoverinfo='text',
-    showlegend=False
-)
-traces.append(country_trace)
-
-# 配置地图
-fig = go.Figure(data=traces)
-# 修改地理参数部分为：
-fig.update_geo(
-    resolution=50,  # 提高地图分辨率
-    visible=True,  # 确保地理图层可见
-    countrycolor="Black",  # 使用高对比度的红色
-    countrywidth=3,  # 加粗边界线
-    landcolor="rgb(245,245,220)",  # 米色陆地
-    oceancolor="rgb(173,216,230)",  # 浅蓝色海洋
-    coastlinewidth=2,  # 加粗海岸线
-    coastlinecolor="navy"  # 蓝色海岸线
-)
-
-fig.update_layout(
-    geo=dict(
-        showcountries=True,  # 强制显示国家边界
-        projection_type="natural earth",
-        scope="world",  # 明确指定显示范围
-        bgcolor="rgba(255,255,255,0.9)"  # 设置画布背景
+    fig = go.Figure(data=traces)
+    fig.update_layout(
+        title_text='全球供应链状态分析系统',
+        updatemenus=[dict(
+            type='dropdown',
+            direction='down',
+            active=0,
+            buttons=buttons,
+            x=0.12,
+            xanchor='left',
+            y=1.15
+        )],
+        geo=dict(
+            resolution=110,
+            showframe=True,
+            showcoastlines=True,
+            coastlinecolor='rgb(100,100,100)',
+            landcolor='rgb(245,245,240)',
+            oceancolor='rgb(220,240,255)'
+        ),
+        height=750,
+        margin=dict(l=0, r=0, t=90, b=0)
     )
-)
+    return fig
 
+def get_layer(w):
+    """权重值转中文层级"""
+    if w >= 0.9: return 'Ⅰ级（直接辐射）'
+    elif w >= 0.4: return 'Ⅱ级（次级影响）'
+    else: return 'Ⅲ级（远端传导）'
+
+    
+# 生成可视化图表
+fig = create_map_figure(status_data)
 fig.show()
