@@ -373,7 +373,8 @@ df_sc[df_sc['source_company_belong'].isna()]
 print(df_sc['end_'].head())  # 查看前几行数据
 print(df_sc['end_'].apply(type).value_counts())  # 统计元素类型
 df_sc[df_sc['end_'].isna()]
-Save('8.新算法_添加所属国家后的供应链关系表','xlsx',path_dic['middle'],df_sc)
+df_sc.to_csv(path_dic['middle']+'\\' + '8.新算法_添加所属国家后的供应链关系表.csv', index=False)
+# Save('8.新算法_添加所属国家后的供应链关系表','xlsx',path_dic['middle'] + '\\',df_sc)
 
 #endregion 中间处理过程 
 
@@ -386,26 +387,44 @@ files
 for index,file in enumerate(files):
     print(f'索引 {index}： {file}')
 files[7]
-df_sc = pd.read_excel(files[7],dtype={'source_company_id':str,'target_company_id':str,
-                                              'SOURCE_ticker':str,'TARGET_ticker':str}) 
-# df_sc = pd.read_excel(r'C:\Users\32915\Desktop\8.新算法_添加所属国家后的供应链关系表.xlsx',
-#                       dtype={'source_company_id':str,'target_company_id':str,
+# df_sc = pd.read_excel(files[7],dtype={'source_company_id':str,'target_company_id':str,
 #                                               'SOURCE_ticker':str,'TARGET_ticker':str}) 
+df_sc = pd.read_csv(
+    files[7],
+    dtype={
+        'source_company_id': str,
+        'target_company_id': str,
+        'SOURCE_ticker': str,
+        'TARGET_ticker': str
+    }
+)
 
+# 转换 start_ 列（兼容纯日期或含时间的字符串）
+df_sc["start_"] = pd.to_datetime(df_sc["start_"], errors="coerce")
+# 截断 start_ 列的时间部分（保留日期）
+df_sc["start_"] = df_sc["start_"].dt.floor("D")
 
 
 # Pandas 的 Timestamp 使用 64 位整数 存储纳秒级时间戳（从 1970 年 1 月 1 日起算），
 # 其最大日期范围约为 公元 1677 年到 2262 年。
 # 当代码中使用了超出此范围的日期（如 4000-01-01），尝试将其转换为纳秒时会触发整数溢出（OverflowError），
 # 最终导致 OutOfBoundsDatetime 错误。
-MAX_PANDAS_DATE = pd.Timestamp.max  # This is 2262-04-11
-for i in df_sc.index:
-    end_time = df_sc.loc[i,'end_']
-    if end_time > datetime(2025,1,1):
-        df_sc.loc[i,'end_'] = datetime(2025,1,1)
-    print(f'已解决{i+1}/{len(df_sc.index)}')
 
-df_sc[df_sc['end_'] >= datetime(2025,1,1)]
+
+# 2. 转换日期（自动推断格式）
+df_sc["end_"] = pd.to_datetime(df_sc["end_"], errors="coerce").dt.floor("D")
+
+	# 步骤3：填充缺失值(其实质为4000-01-01 00:00:00)为 2025-01-01
+df_sc["end_"] = df_sc["end_"].fillna(pd.to_datetime("2025-01-01"))
+ 
+
+df_sc.head(50)
+df_sc.info()
+
+print("end_ 缺失值数量:", df_sc['end_'].isna().sum())
+print("start_ 缺失值数量:", df_sc['start_'].isna().sum())
+
+
 
 
 
@@ -496,12 +515,20 @@ for relation in relations:
     print(f'已转换并保存 {count+1}/{total}')
     count += 1
  
+
 ################################################### 写入JSON文件
 with open(path_dic['middle'] + '\\' + 'supply_relations.json', 'w') as f:
     json.dump(data_to_save, f, indent=4)
 print("数据已保存至 supply_relations.json")
 
 
+c = 0
+for i in relations:
+    print(i)
+    print(f'{type(i.end)}:{i.end}')
+    c+=1
+    if c>50:
+        break
 #endregion 中间处理过程_2
 
 
@@ -543,7 +570,7 @@ for rel in loaded_relation_data:
 
 
  # 初始化分析器
-analyzer = SupplyChainAnalyzer(restored_relations, recovery_period=90,end_date=datetime(2021,1,1))
+analyzer = SupplyChainAnalyzer(restored_relations, recovery_period=90,end_date=datetime(2025,1,1))
 len(analyzer.graph)
 # # analyzer.graph
 # for cop, cop_relation in analyzer.graph.items():
@@ -696,112 +723,112 @@ with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', 'w', encodin
 
 
 
-# region 存储数据的读取和后续查询操作原理
-import json
-################################################## 读取JSON文件
+# # region 存储数据的读取和后续查询操作原理
+# import json
+# ################################################## 读取JSON文件
 
-with open(path_dic['middle'] + '\\' + 'company.json', 'r') as f:
-    loaded_company_data = json.load(f)
+# with open(path_dic['middle'] + '\\' + 'company.json', 'r') as f:
+#     loaded_company_data = json.load(f)
 
-#重建company对象
-companies = dict()
-count = 0
-for cop in loaded_company_data:
-    companies[cop['id']] = Company(cop['id'],cop['country'],cop['listed'])
-    # print(f'已解决{count+1}')
-    count+=1
-
-
-# 读取数据
-with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', encoding='utf-8') as f:
-    loaded_data = json.load(f)
-
-# 数据结构测试
-count = 0
-for key,value in loaded_data.items():
-    print(key)
-    for rel in value:
-        # print(f"链条情况: {rel}")
-        print(f'具体链条情况：{rel}')
-    if count>1:
-        break
-    count+=1
+# #重建company对象
+# companies = dict()
+# count = 0
+# for cop in loaded_company_data:
+#     companies[cop['id']] = Company(cop['id'],cop['country'],cop['listed'])
+#     # print(f'已解决{count+1}')
+#     count+=1
 
 
+# # 读取数据
+# with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', encoding='utf-8') as f:
+#     loaded_data = json.load(f)
+
+# # 数据结构测试
+# count = 0
+# for key,value in loaded_data.items():
+#     print(key)
+#     for rel in value:
+#         # print(f"链条情况: {rel}")
+#         print(f'具体链条情况：{rel}')
+#     if count>1:
+#         break
+#     count+=1
 
 
-# 1. 获取所有初始节点
-initial_nodes = list(loaded_data.keys())
-# print("所有初始节点:", initial_nodes)
+
+
+# # 1. 获取所有初始节点
+# initial_nodes = list(loaded_data.keys())
+# # print("所有初始节点:", initial_nodes)
  
-# 2. 获取指定初始节点的所有路径
-def get_paths_by_initial(initial_node):
-    return loaded_data.get(initial_node, [])
+# # 2. 获取指定初始节点的所有路径
+# def get_paths_by_initial(initial_node):
+#     return loaded_data.get(initial_node, [])
  
-s3_paths = get_paths_by_initial('117591775')
-s3_paths
-len(s3_paths)
-#输出结果演示，如何读取相应的内容
-for path in s3_paths:
-    print(path['path'])
-    print([dic['name'] for dic in path['path']])
-    print(f"路径长度：{len(path['path'])}，最终状态：{path['final_status']}")
+# s3_paths = get_paths_by_initial('117591775')
+# s3_paths
+# len(s3_paths)
+# #输出结果演示，如何读取相应的内容
+# for path in s3_paths:
+#     print(path['path'])
+#     print([dic['name'] for dic in path['path']])
+#     print(f"路径长度：{len(path['path'])}，最终状态：{path['final_status']}")
 
-# 3. 查找包含特定节点的路径
-def find_paths_containing_node(target_node):
-    results = []
-    for initial, paths in loaded_data.items():
-        for chain in paths:
-            nodes_in_chain = [node['name'] for node in chain['path']]
-            if target_node in nodes_in_chain:
-                results.append({
-                    "initial": initial,
-                    "path": chain['path'],
-                    "final_status": chain['final_status']
-                })
-    return results
+# # 3. 查找包含特定节点的路径
+# def find_paths_containing_node(target_node):
+#     results = []
+#     for initial, paths in loaded_data.items():
+#         for chain in paths:
+#             nodes_in_chain = [node['name'] for node in chain['path']]
+#             if target_node in nodes_in_chain:
+#                 results.append({
+#                     "initial": initial,
+#                     "path": chain['path'],
+#                     "final_status": chain['final_status']
+#                 })
+#     return results
  
-c4_paths = find_paths_containing_node('117591775')
-c4_paths
-print(f"找到 {len(c4_paths)} 条包含 117591775 的路径")
+# c4_paths = find_paths_containing_node('117591775')
+# c4_paths
+# print(f"找到 {len(c4_paths)} 条包含 117591775 的路径")
 
 
-	# 4. 查找特定状态模式的路径
+# 	# 4. 查找特定状态模式的路径
 
-def find_by_status(data,pattern):
-    count=0
-    find_path = []
-    for initial_node,chains in data.items():
-        initial_list = []
-        initial_list.append(initial_node)
-        for chain in chains:
-            flag = False
+# def find_by_status(data,pattern):
+#     count=0
+#     find_path = []
+#     for initial_node,chains in data.items():
+#         initial_list = []
+#         initial_list.append(initial_node)
+#         for chain in chains:
+#             flag = False
         
-            path = chain['path'] 
-            for node in path:
-                if node['status'] == pattern:
-                    initial_list.append(chain)
-                    flag = True 
-                    count+=1
-                    break
-            if flag:
-                count-=1
-                break
+#             path = chain['path'] 
+#             for node in path:
+#                 if node['status'] == pattern:
+#                     initial_list.append(chain)
+#                     flag = True 
+#                     count+=1
+#                     break
+#             if flag:
+#                 count-=1
+#                 break
 
-        find_path.append(initial_list)
-    print(f'count:{count}')
-    return find_path
+#         find_path.append(initial_list)
+#     print(f'count:{count}')
+#     return find_path
 
-len(loaded_data)
-limit_paths = find_by_status(loaded_data,'permanent_break')
+# len(loaded_data)
+# limit_paths = find_by_status(loaded_data,'permanent_break')
 
-count=0
-for path in limit_paths:
-    print(path)
-    if count>50:
-        break
-    count+=1
+# count=0
+# for path in limit_paths:
+#     print(path)
+#     if count>50:
+#         break
+#     count+=1
 
-print(f"找到 {len(limit_paths)} 条包含路径")
+# print(f"找到 {len(limit_paths)} 条包含路径")
  
-#endregion 存储数据的读取和后续查询操作原理
+# #endregion 存储数据的读取和后续查询操作原理
