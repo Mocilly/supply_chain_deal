@@ -195,7 +195,7 @@ class SupplyChainAnalyzer:
                 visited_companies: set['Company'],
                 last_end: Optional[datetime] = None):
             
-            # 记录所有有效路径（不限制状态）
+            # 记录所有有效路径（不限制状态），添加中国公司检验
             if len(path) >= min_length:
                 country_check = False
                 for rel in path:
@@ -531,7 +531,7 @@ for i in relations:
         break
 #endregion 中间处理过程_2
 
-
+# region 供应链长链建立
 import json
 ################################################## 读取JSON文件
 
@@ -601,7 +601,7 @@ len(chains)
 # region 以下是需要执行两遍的代码，两个chains分别执行一遍，并记得更改最终形成的json文件名
 # for chain in chains:
 #     print([f"{rel.from_co.id}→{rel.to_co.id}" for rel in chain])
-# endregion
+
  
 
 # 验证供应链路径 -------------------------------------------------
@@ -627,72 +627,112 @@ print("\n【完全供应链路径】")
 #     # print(chain)
 #     for rel in chain:
 #         # print(type(rel))
+#region 废弃部分 下方代码二合一了
+# def find_path (chains):
+#     all_paths = []
+#     count = 0
+#     for i, chain in enumerate(chains, 1):
+#         path = []
+#         end_str = []
+#         if chain[-1].end <= analyzer.end_date:
+#             #产业链最后结束时间在贸易战冲击以内，记为限定日期内断裂
+#             end_str.append('limit_day_break')
+#         else:
+#             #产业链最后结束时间在贸易战冲击以外，记为超限定日期持续性产业链 ，标记为该状态后需要进一步检验该产业链内部状态
+#             end_str.append('beyond_day_continue' )
+#         for r,rel in enumerate(chain):
+#             path.append(f"{rel.from_co.id}→"f"{rel.to_co.id}({rel.status})")
+#         all_paths.append(f"{" → ".join(path)}[{end_str[0]}]")
+#         # print(f'已解决{count+1}')
+#         count+=1
+#     return all_paths
+# all_chains = find_path(chains)
 
-def find_path (chains):
-    all_paths = []
-    count = 0
-    for i, chain in enumerate(chains, 1):
-        path = []
-        end_str = []
-        if chain[-1].end <= analyzer.end_date:
-            #产业链最后结束时间在贸易战冲击以内，记为限定日期内断裂
-            end_str.append('limit_day_break')
-        else:
-            #产业链最后结束时间在贸易战冲击以外，记为超限定日期持续性产业链 ，标记为该状态后需要进一步检验该产业链内部状态
-            end_str.append('beyond_day_continue' )
-        for r,rel in enumerate(chain):
-            path.append(f"{rel.from_co.id}→"f"{rel.to_co.id}({rel.status})")
-        all_paths.append(f"{" → ".join(path)}[{end_str[0]}]")
-        # print(f'已解决{count+1}')
-        count+=1
-    return all_paths
-all_chains = find_path(chains)
-
-len(all_chains)
-# all_chains
+# len(all_chains)
+# # all_chains
 
 
-import re
+# import re
 
-def parse_paths(path_lines):
+# def parse_paths(path_lines):
+#     data = {}
+#     for line in path_lines:
+#         # 分离最终状态和节点链
+#         final_status_match = re.search(r'\[([^\]]+)\]$', line)
+#         final_status = final_status_match.group(1) if final_status_match else None
+#         nodes_part = line[:final_status_match.start()].strip() if final_status_match else line.strip()
+        
+#         # 清洗节点链：统一箭头格式
+#         nodes_part = re.sub(r'\s*→\s*', '→', nodes_part)
+#         nodes = nodes_part.split('→')
+#         if not nodes:
+#             continue
+        
+#         initial_node = nodes[0].strip()
+#         subsequent_nodes = []
+#         for node_str in nodes[1:]:
+#             node_str = node_str.strip()
+#             # 解析节点名称、状态和时间参数
+#             match = re.match(r'^([^(]+)\(([^)]+)\)$', node_str)
+#             if match:
+#                 name, status = match.groups()
+#             else:
+#                 name, status = node_str, None
+#             subsequent_nodes.append({"name": name, "status": status})
+        
+#         # 存入数据结构
+#         if initial_node not in data:
+#             data[initial_node] = []
+#         data[initial_node].append({
+#             "path": subsequent_nodes,
+#             "final_status": final_status
+#         })
+#     return data
+#endregion 废弃部分 下方代码二合一了
+
+def find_path(chains, end_date):
     data = {}
-    for line in path_lines:
+    for chain in chains:
+        # 解析链条中的每个关系(rel)
+        path_nodes = []
+        initial_node = None
+        path_start_time = None
+        path_end_time = None
         
-        # 分离最终状态和节点链
-        final_status_match = re.search(r'\[([^\]]+)\]$', line)
-        final_status = final_status_match.group(1) if final_status_match else None
-        nodes_part = line[:final_status_match.start()].strip() if final_status_match else line.strip()
+        for rel in chain:
+            # 初始化起始节点
+            if not initial_node:
+                initial_node = rel.from_co.id
+                path_start_time = rel.start
+            
+            # 构建节点信息（直接从rel对象获取）
+            node = {
+                "name": rel.to_co.id,
+                "status": rel.status,
+                "start": rel.start,
+                "end": rel.end
+            }
+            path_nodes.append(node)
+            path_end_time = rel.end  # 持续更新路径结束时间
+
+        # 确定最终状态
+        final_status = 'limit_day_break' if path_end_time <= end_date else 'beyond_day_continue'
         
-        # 清洗节点链：统一箭头格式
-        nodes_part = re.sub(r'\s*→\s*', '→', nodes_part)
-        nodes = nodes_part.split('→')
-        if not nodes:
-            continue
-        
-        initial_node = nodes[0].strip()
-        subsequent_nodes = []
-        for node_str in nodes[1:]:
-            node_str = node_str.strip()
-            # 解析节点名称和状态
-            match = re.match(r'^([^(]+)\(([^)]+)\)$', node_str)
-            if match:
-                name, status = match.groups()
-            else:
-                name, status = node_str, None
-            subsequent_nodes.append({"name": name, "status": status})
-        
-        # 存入数据结构
+        # 组装数据结构
         if initial_node not in data:
             data[initial_node] = []
+            
         data[initial_node].append({
-            "path": subsequent_nodes,
-            "final_status": final_status
+            "path": path_nodes,
+            "final_status": final_status,
+            "start_time": path_start_time,
+            "end_time": path_end_time
         })
+    
     return data
 
-
 # 解析并存储数据
-parsed_data = parse_paths(all_chains)
+parsed_data = find_path(chains)
 len(parsed_data)
 # 示例输出查看
 import json
@@ -721,7 +761,7 @@ with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', 'w', encodin
 #     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
 #endregion 以下是需要执行两遍的代码，两个chains分别执行一遍，并记得更改最终形成的json文件名
 
-
+#endregion 供应链长链建立
 
 # # region 存储数据的读取和后续查询操作原理
 # import json
