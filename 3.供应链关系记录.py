@@ -570,7 +570,7 @@ for rel in loaded_relation_data:
 
 
  # 初始化分析器
-analyzer = SupplyChainAnalyzer(restored_relations, recovery_period=90,end_date=datetime(2025,1,1))
+analyzer = SupplyChainAnalyzer(restored_relations, recovery_period=90,end_date=datetime(2024,12,31))
 len(analyzer.graph)
 # # analyzer.graph
 # for cop, cop_relation in analyzer.graph.items():
@@ -693,55 +693,54 @@ print("\n【完全供应链路径】")
 def find_path(chains, end_date):
     data = {}
     for chain in chains:
-        # 解析链条中的每个关系(rel)
         path_nodes = []
         initial_node = None
-        path_start_time = None
-        path_end_time = None
+        path_start_dt = None  # 保留datetime用于初始时间记录
+        path_end_dt = None    # 保留datetime用于最终状态判断
         
         for rel in chain:
-            # 初始化起始节点
+            # 初始化起始节点（仅在第一次循环执行）
             if not initial_node:
                 initial_node = rel.from_co.id
-                path_start_time = rel.start
+                path_start_dt = rel.start  # 保持datetime类型用于后续格式转换
             
-            # 构建节点信息（直接从rel对象获取）
+            # 构建带字符串时间戳的节点信息
             node = {
                 "name": rel.to_co.id,
                 "status": rel.status,
-                "start": rel.start,
-                "end": rel.end
+                "start": rel.start.isoformat() if rel.start else None,  # 转换为ISO字符串
+                "end": rel.end.isoformat() if rel.end else None         # 转换为ISO字符串
             }
             path_nodes.append(node)
-            path_end_time = rel.end  # 持续更新路径结束时间
-
-        # 确定最终状态
-        final_status = 'limit_day_break' if path_end_time <= end_date else 'beyond_day_continue'
+            path_end_dt = rel.end  # 持续更新为datetime类型
+            
+        # 最终状态判断（使用未转换的datetime进行比较）
+        final_status = 'limit_day_break' if path_end_dt <= end_date else 'beyond_day_continue'
         
-        # 组装数据结构
+        # 组装带字符串时间戳的路径信息
         if initial_node not in data:
             data[initial_node] = []
             
         data[initial_node].append({
             "path": path_nodes,
             "final_status": final_status,
-            "start_time": path_start_time,
-            "end_time": path_end_time
+            "start_time": path_start_dt.isoformat() if path_start_dt else None,  # 转换初始时间
+            "end_time": path_end_dt.isoformat() if path_end_dt else None         # 转换结束时间
         })
     
     return data
 
 # 解析并存储数据
-parsed_data = find_path(chains)
+
+parsed_data = find_path(chains,analyzer.end_date)
 len(parsed_data)
 # 示例输出查看
-import json
 
 # # 数据结构测试
 # count = 0
 # for key,value in parsed_data.items():
 #     print(key)
-#     print(value)
+#     # print(value)
 #     for rel in value:
 #     #     # print(f"链条情况: {rel}")
 #         print(f'{rel}')
@@ -759,6 +758,40 @@ with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', 'w', encodin
 #     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
 # with open(path_dic['middle'] + '\\' +'complete_supply_chains_3.json', 'w', encoding='utf-8') as f:
 #     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
+
+
+# 数据结构片段解释：
+'''
+	{
+  "S1": [
+    {
+      "path": [
+        {
+          "name": "C4", 
+          "status": "permanent_break",
+          "start_time": "2023-01-01",
+          "end": "2023-12-31"
+        },
+        {
+          "name": "C5",
+          "status": None,
+          "start": None,
+          "end": None
+        },
+        {
+          "name": "C6",
+          "status": "transfer",
+          "start": "2024-01-01",
+          "end": None
+        }
+      ],
+      "final_status": "limit_day_break",
+      "start_time": "2023-01-01",
+      "end_time": "2025-01-01"
+    }
+  ]
+}
+'''
 #endregion 以下是需要执行两遍的代码，两个chains分别执行一遍，并记得更改最终形成的json文件名
 
 #endregion 供应链长链建立
