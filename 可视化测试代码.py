@@ -1,6 +1,7 @@
 
 # region ######################################################  开始必备执行代码   
 import os
+import re
 
 import numpy as np
 import pandas as pd
@@ -283,7 +284,9 @@ class SupplyChainAnalyzer:
 import json
 import plotly.graph_objects as go
 
-with open(path_dic['middle'] + '\\' + 'company.json', 'r') as f:
+# with open(path_dic['middle'] + '\\' + 'company.json', 'r') as f:
+#     loaded_company_data = json.load(f)
+with open(r'C:\Users\32915\Desktop\研创文件\company.json', 'r') as f:
     loaded_company_data = json.load(f)
 
 #重建company对象
@@ -294,77 +297,181 @@ for cop in loaded_company_data:
     # print(f'已解决{count+1}')
     count+=1
 
-# 读取数据
-with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', encoding='utf-8') as f:
+# 公司-国家映射表（用于后续路径分析）
+company_to_country = dict()
+for company,info in companies.items():
+    company_to_country[company] = info.country
+    
+
+
+# 读取数据（需要替换为实际路径）
+with open(r'C:\Users\32915\Desktop\研创文件\complete_supply_chains.json', 'r', encoding='utf-8') as f:
     loaded_data = json.load(f)
 
-# 转换数据结构：生成类似 path_lines 的供应链路径描述
 path_lines = []
- 
-# 遍历每个初始节点（例如 S1, S2, S3）
+
+# 遍历每个初始节点（如 S1）
 for initial_node, chains in loaded_data.items():
-    # 遍历该初始节点下的所有供应链链条
+    # 遍历该初始节点下的所有链条
     for chain in chains:
         path_segments = []
         nodes = chain.get('path', [])
         final_status = chain.get('final_status', '')
-        # 遍历节点，生成连续的边（source→target）
-        for i in range(len(nodes) - 1):
-            source = nodes[i]['name']
-            target = nodes[i + 1]['name']
-            status = nodes[i + 1]['status']  # 使用目标节点的状态作为边的状态
-            # 关键改进：过滤 source == target 的边
-            if source == target:
-                continue  # 跳过两端相同的边
-            # 处理状态显示逻辑
-            if status and status.lower() != 'none':
-                segment = f"{source}→{target}({status})"
-            else:
-                segment = f"{source}→{target}"
+        
+        # 生成初始节点到第一个节点的边（核心新增逻辑）
+        if nodes:
+            first_node = nodes[0]
+            initial_segment = f"{initial_node}→{first_node['name']}"
+            # 添加第一个节点的状态
+            if first_node.get('status') and str(first_node['status']).lower() != 'none':
+                initial_segment += f"({first_node['status']})"
+            path_segments.append(initial_segment)
             
-            path_segments.append(segment)
-        # 添加最终状态（可选）
-        # if final_status:
-        #     path_segments.append(f"[最终状态: {final_status}]")
+            # 生成后续节点间的边
+            for i in range(len(nodes)-1):
+                source = nodes[i]['name']
+                target = nodes[i+1]['name']
+                status = nodes[i+1].get('status')
+                
+                if source == target:  # 过滤自循环边
+                    continue
+                
+                # 构建边描述
+                segment = f"{source}→{target}"
+                if status and str(status).lower() != 'none':
+                    segment += f"({status})"
+                path_segments.append(segment)
         
         # 拼接完整路径
         if path_segments:
             full_path = " → ".join(path_segments)
+            # 添加最终状态
+            if final_status:
+                full_path += f"[{final_status}]"
             path_lines.append(full_path)
 
+# 示例输出
+for path in path_lines[:10]:
+    print(path)
 
 
 
-# 公司-国家映射表（所有S开头公司属于中国）
-company_to_country = {
-    **{f"S{i}": "China" for i in range(1,4)},  # S1-S3均来自中国
-    "C1": "USA", "C2": "Germany", "C3": "Japan",
-    "C4": "India", "C5": "France", "C6": "UK"
-}
 
-# 国家地理坐标（经度，纬度）
+
+#region国家地理坐标（经度，纬度）
 country_coords = {
-    "China": [104.1954, 35.8617],
-    "USA": [-95.7129, 37.0902],
-    "Germany": [10.4515, 51.1657],
-    "Japan": [138.2529, 36.2048],
-    "India": [78.9629, 20.5937],
-    "France": [2.2137, 46.2276],
-    "UK": [-3.43597, 55.3781],
+    # 主權國家
+    "AE": [54.3000, 23.4241],     # 阿联酋
+    "AR": [-63.6167, -38.4161],   # 阿根廷
+    "AT": [14.5500, 47.5162],     # 奥地利
+    "AU": [133.7751, -25.2744],   # 澳大利亚
+    "BA": [17.6790, 43.9159],     # 波黑
+    "BD": [90.4125, 23.6850],     # 孟加拉国
+    "BE": [4.4699, 50.5039],      # 比利时
+    "BG": [25.4858, 42.7339],     # 保加利亚
+    "BH": [50.5577, 26.0667],     # 巴林
+    "BM": [-64.7500, 32.2948],    # 百慕大（英国海外领地）
+    "BR": [-51.9253, -14.2350],   # 巴西
+    "BS": [-77.3961, 25.0343],    # 巴哈马
+    "BW": [24.0000, -22.0000],    # 博茨瓦纳
+    "CA": [-106.3468, 56.1304],   # 加拿大
+    "CH": [8.2275, 46.8182],      # 瑞士
+    "CI": [-5.5471, 7.5400],      # 科特迪瓦
+    "CL": [-71.5429, -35.6751],   # 智利
+    "CM": [12.3547, 7.3697],      # 喀麦隆
+    "CN": [104.1954, 35.8617],    # 中国
+    "CO": [-74.2973, 4.5709],     # 哥伦比亚
+    "CR": [-83.7534, 9.7489],     # 哥斯达黎加
+    "CY": [33.4299, 35.1264],     # 塞浦路斯
+    "CZ": [15.4729, 49.8175],     # 捷克
+    "DE": [10.4515, 51.1657],     # 德国
+    "DK": [9.5018, 56.2639],      # 丹麦
+    "EE": [25.0136, 58.5953],     # 爱沙尼亚
+    "EG": [30.8025, 26.8206],     # 埃及
+    "ES": [-3.7492, 40.4637],     # 西班牙
+    "FI": [25.7482, 61.9241],     # 芬兰
+    "FO": [-6.9118, 61.8926],     # 法罗群岛（丹麦自治领）
+    "FR": [2.2137, 46.2276],      # 法国
+    "GA": [11.6094, -0.8037],     # 加蓬
+    "GB": [-3.43597, 55.3781],    # 英国
+    "GE": [43.3569, 42.3154],     # 格鲁吉亚
+    "GH": [-1.0232, 7.9465],      # 加纳
+    "GR": [21.8243, 39.0742],     # 希腊
+    "HK": [114.1694, 22.3193],    # 中国香港特别行政区
+    "HR": [15.2000, 45.1000],     # 克罗地亚
+    "HU": [19.5033, 47.1625],     # 匈牙利
+    "ID": [113.9213, -0.7893],    # 印度尼西亚
+    "IE": [-8.2439, 53.4129],     # 爱尔兰
+    "IL": [34.8516, 31.0461],     # 以色列
+    "IN": [78.9629, 20.5937],     # 印度
+    "IS": [-19.0208, 64.9631],    # 冰岛
+    "IT": [12.5674, 41.8719],     # 意大利
+    "JP": [138.2529, 36.2048],    # 日本
+    "KE": [37.9062, -0.0236],     # 肯尼亚
+    "KR": [127.7669, 35.9078],    # 韩国
+    "KW": [47.4818, 29.3117],     # 科威特
+    "KZ": [66.9237, 48.0196],     # 哈萨克斯坦
+    "LB": [35.8623, 33.8547],     # 黎巴嫩
+    "LK": [80.7718, 7.8731],      # 斯里兰卡
+    "LT": [23.8813, 55.1694],     # 立陶宛
+    "LU": [6.1296, 49.8153],      # 卢森堡
+    "LV": [24.6032, 56.8796],     # 拉脱维亚
+    "MA": [-7.0926, 31.7917],     # 摩洛哥
+    "MX": [-102.5528, 23.6345],   # 墨西哥
+    "MY": [109.6976, 3.1409],     # 马来西亚
+    "NG": [8.6753, 9.0820],       # 尼日利亚
+    "NL": [5.2913, 52.1326],      # 荷兰
+    "NO": [8.4689, 60.4720],      # 挪威
+    "NZ": [174.7762, -40.9006],   # 新西兰
+    "OM": [55.9233, 21.4735],     # 阿曼
+    "PE": [-75.0152, -9.1899],    # 秘鲁
+    "PH": [121.7740, 12.8797],    # 菲律宾
+    "PK": [69.3451, 30.3753],     # 巴基斯坦
+    "PL": [19.1451, 51.9194],     # 波兰
+    "PT": [-8.2245, 39.3999],     # 葡萄牙
+    "QA": [51.1839, 25.3548],     # 卡塔尔
+    "RO": [24.9668, 45.9432],     # 罗马尼亚
+    "RU": [105.3188, 61.5240],    # 俄罗斯
+    "SA": [45.0792, 23.8859],     # 沙特阿拉伯
+    "SE": [18.6435, 60.1282],     # 瑞典
+    "SG": [103.8198, 1.3521],     # 新加坡
+    "TH": [100.9925, 15.8700],    # 泰国
+    "TR": [35.2433, 38.9637],     # 土耳其
+    "TW": [120.9605, 23.6978],    # 中国台湾地区
+    "UA": [31.1656, 48.3794],     # 乌克兰
+    "US": [-95.7129, 37.0902],    # 美国
+    "ZA": [22.9375, -30.5595],    # 南非
+    "ZW": [29.1549, -19.0154],    # 津巴布韦
 
+    # 特殊地区
+    "GI": [-5.3454, 36.1408],     # 直布罗陀（英国海外领地）
+    "GG": [-2.5853, 49.4657],     # 根西岛（英国皇家属地）
+    "JE": [-2.1312, 49.2144],     # 泽西岛（英国皇家属地）
+    "MO": [113.5439, 22.1987],    # 中国澳门特别行政区
+    "PR": [-66.5901, 18.2208],    # 波多黎各（美国自由邦）
+    "PS": [35.2332, 31.9522],     # 巴勒斯坦（争议地区）
+    "VI": [-64.8963, 18.3358],    # 美属维尔京群岛
+    
+    # 特殊标记
+    "Multi_Nations": None,          # 多国共有区域（需根据具体案例定义）
+    "Nation Not_Found": None      # 无法识别的代码
 }
+#endregion国家地理坐标（经度，纬度）
 
 # region ###################################################### 统计逻辑实现
 def analyze_paths(path_lines):
     """
-    供应链状态分析函数
+    修复版数据分析函数
+        供应链状态分析函数（最终版）
+    1. 解析路径末尾的final_status
+    2. 当final_status为limit_day_break时：
+       - 启用新的层级权重系数（1, 0.7, 0.4）
+       - 最终权重 = 层级权重 × 0.1
     
-    功能：
-    1. 永久断裂(permanent_break)处理逻辑：
-       - 跟踪从中国开始的连续断裂链条
-       - 按层级加权（第1层x1，第2层x0.5，第3层x0.1）
-    2. 转移(transfer)/恢复(recovered)处理逻辑：
-       - 仅统计中国直接发起的单个状态变化
+    新增规则：
+    1. 当且仅当以下两个条件同时满足时应用limit_day_break权重：
+       - final_status == 'limit_day_break'
+       - 路径最后一个节点状态 != 'permanent_break'
     """
     status_records = {
         'permanent_break': defaultdict(float),
@@ -372,183 +479,185 @@ def analyze_paths(path_lines):
         'recovered': defaultdict(float)
     }
 
+    # 增强正则表达式
+    seg_pattern = re.compile(r'(\w+)→(\w+)(?:\((\w+)\))?(?:\[(\w+)\])?')
+
     for path in path_lines:
-        # 分解路径为独立段（忽略时间标记）
         segments = []
+        final_status = None
+        
+        # 分离路径段
         for seg in path.split(' → '):
-            if match := re.match(r'(\w+)→(\w+)\((\w+)\)', seg.split('[')[0]):
-                segments.append(match.groups())
-
-        current_chain = None  # 跟踪当前断裂链条状态
-
-        for start_comp, end_comp, status in segments:
+            if match := seg_pattern.match(seg):
+                start, end, status, f_status = match.groups()
+                if f_status:
+                    final_status = f_status
+                segments.append((start, end, status))
+        
+        # 状态处理逻辑
+        current_chain = None
+        for idx, (start_comp, end_comp, status) in enumerate(segments):
             start_country = company_to_country.get(start_comp)
             end_country = company_to_country.get(end_comp)
             
-            # 处理永久断裂状态
+            # 必须存在国家映射
+            if not all([start_country, end_country]):
+                continue
+                
+            # 处理永久断裂
             if status == 'permanent_break':
-                if current_chain:  # 延续现有链条
+                # 层级计算
+                if current_chain:
                     layer = current_chain['layer'] + 1
-                    weight = 1.0 if layer == 1 else 0.5 if layer == 2 else 0.1
-                    current_chain['layer'] = layer
                 else:  # 新链条必须起始于中国
-                    if start_country == 'China':
+                    if start_country == 'CN':
                         layer = 1
-                        weight = 1.0
-                        current_chain = {'layer': layer}
                     else:
-                        continue  # 非中国起始的断裂不统计
+                        continue
+                    current_chain = {'layer': layer}
                 
-                # 记录国家间断裂关系及加权值
-                status_records['permanent_break'][(start_country, end_country)] += weight
-            
-            # 处理转移/恢复状态（仅中国直接发起）
-            elif start_country == 'China':
-                if status == 'transfer':
-                    status_records['transfer'][(start_country, end_country)] += 1.0
-                elif status == 'recovered':
-                    status_records['recovered'][(start_country, end_country)] += 1.0
+                # 权重计算
+                is_limit_break = (
+                    final_status == 'limit_day_break' and 
+                    (idx == len(segments)-1 and status != 'permanent_break')
+                )
                 
-                # 状态变化中断永久断裂链条
-                current_chain = None
+                weight = (
+                    0.1 * {1:1.0, 2:0.7, 3:0.4}.get(layer, 0) 
+                    if is_limit_break 
+                    else {1:1.0, 2:0.5, 3:0.1}.get(layer, 0)
+                )
+                
+                # 记录数据
+                key = (start_country, end_country)
+                status_records['permanent_break'][key] += weight
             
-            # 非永久断裂状态中断链条
-            else:
+            # 处理其他状态
+            elif status in ('transfer', 'recovered'):
+                if start_country == 'CN':
+                    status_records[status][(start_country, end_country)] += 1.0
                 current_chain = None
 
     return status_records
 
 status_data = analyze_paths(path_lines)
+
+count = 0
+for key,value in status_data.items():
+    print(key,value)
+    count+=1
+    if count > 20:
+        break
+print("\n原始状态数据样本：")
+for status in ['permanent_break', 'transfer', 'recovered']:
+    print(f"{status}: {list(status_data[status].items())[:3]}")
 # endregion
 
-# endregion
-# endregion
-def create_map_figure(status_data):
+
+
+def create_map_figure(status_data, max_line_width=15):
     traces = []
-    max_line_width = 15
     color_mapping = {
-        'permanent_break': 'rgb(230,50,50)',
-        'transfer': 'rgb(50,180,50)',
-        'recovered': 'rgb(50,50,230)'
+        'permanent_break': 'rgb(230,50,50)',  # 红色
+        'transfer': 'rgb(50,180,50)',         # 绿色
+        'recovered': 'rgb(255,200,0)'         # 黄色
     }
-	  # 修正后的国家标签配置
+    valid_countries = {
+        k: v for k, v in country_coords.items()
+        if k not in ['Multi_Nations', 'Nation Not_Found'] and v is not None
+    }
+    # 调试：打印有效国家列表
+    print(f"有效国家数量：{len(valid_countries)}")
+    print("示例国家：", list(valid_countries.keys())[:5])
+
+    # 国家标签层（调整文本尺寸）
     country_trace = go.Scattergeo(
-        lon=[c[0] for c in country_coords.values()],
-        lat=[c[1] for c in country_coords.values()],
+        lon=[c[0] for c in valid_countries.values()],
+        lat=[c[1] for c in valid_countries.values()],
         mode='text',
-        text=[f"<b>{k}</b>" for k in country_coords],
-        textfont=dict(
-            color='#FFA500',
-            family="Arial Black",
-            size=17
-        ),
-        textposition=[
-            # 使用Plotly官方支持的参数值
-            'middle right' if country == "China" else      # 中国
-            'bottom left' if country == "USA" else       # 美国
-            'bottom center' if country == "Germany" else # 德国
-            'middle center' if country == "Japan" else        # 日本
-            'middle center' if country == "India" else    # 印度（修正这里）
-            'middle right' if country == "France" else     # 法国（修正这里）
-            'bottom center'                                # 英国
-            for country in country_coords
-        ],
+        text=[f"<b>{k}</b>" for k in valid_countries],
+        textfont=dict(color='#FFA500', family="Arial Black", size=14),  # 调大字号
+        textposition='middle center',
         hoverinfo='none',
         showlegend=False,
         meta={'status': 'base'}
     )
     traces.append(country_trace)
 
+    # 调试：打印状态数据统计
+    print("\n状态数据统计：")
+    for status in ['permanent_break', 'transfer', 'recovered']:
+        print(f"{status}: {len(status_data[status])}条记录")
 
-    # 生成状态轨迹
+    # 状态轨迹生成（添加调试信息）
     for status in ['permanent_break', 'transfer', 'recovered']:
         data = status_data[status]
         if not data:
+            print(f"{status}无数据")
             continue
             
-        max_weight = max(data.values(), default=1)
+        max_weight = max(data.values()) if data else 1
+        print(f"\n处理{status}，最大权重：{max_weight}")
         
-        for (start, end), weight in data.items():
-            # 坐标验证
-            start_coord = country_coords.get(start, [None, None])
-            end_coord = country_coords.get(end, [None, None])
-            if None in start_coord + end_coord:
+        for i, ((start, end), weight) in enumerate(data.items()):
+            # 调试：打印前5条记录
+            if i < 5:
+                print(f"  {start}→{end} 权重：{weight}")
+
+            # 国家节点过滤（添加调试）
+            if start not in valid_countries or end not in valid_countries:
+                print(f"过滤无效节点：{start}→{end}")
                 continue
                 
-            # 动态线宽
+            # 坐标获取
+            start_coord = valid_countries[start]
+            end_coord = valid_countries[end]
+            
+            # 线宽计算（确保最小可见性）
             line_width = (weight / max_weight) * max_line_width
-            line_width = max(min(line_width, 15), 1.5)
+            line_width = max(min(line_width, max_line_width), 2)  # 最小2px
             
             traces.append(go.Scattergeo(
-                lon=[start_coord[0], end_coord[0], None],
-                lat=[start_coord[1], end_coord[1], None],
+                lon=[start_coord[0], end_coord[0]],
+                lat=[start_coord[1], end_coord[1]],
                 mode='lines',
-                line=dict(
-                    width=line_width,
-                    color=color_mapping[status],
-                    dash='dash' if status == 'permanent_break' else 'solid'
-                ),
-                opacity=0.85,
+                line=dict(width=line_width, color=color_mapping[status], dash='solid'),
+                opacity=0.9 if status == 'permanent_break' else 0.7,
                 hoverinfo='text',
-                hovertext=f"{start}→{end}<br>辐射层级：{get_layer(weight)}<br>权重：{weight:.2f}",
-                visible=(status == 'permanent_break'),
+                hovertext=f"{start}→{end} | 状态：{status} | 权重：{weight:.2f}",
+                visible=True,  # 默认全部可见
                 meta={'status': status}
             ))
 
-     # 修正可见性控制逻辑
-    buttons = []
-    visible_states = ['permanent_break', 'transfer', 'recovered']
-    for status in visible_states:
-        visible = [
-            (t.meta.get('status') == status) if 'meta' in t and t.meta.get('status') != 'base' 
-            else True  # 确保国家标签始终可见
-            for t in traces
-        ]
-        buttons.append(dict(
-            label=f"{status.capitalize()}状态",
-            method='update',
-            args=[{'visible': visible}]
-        ))
-    
+    # 可视化控制（简化配置）
     geo_config = dict(
-        resolution=50,  # 降低地图分辨率
+        resolution=110,
         showcountries=True,
-        countrycolor='rgb(100,100,100)',  # 使用灰色替代纯黑
-        countrywidth=0.8,  # 更细的国家边界
-        showcoastlines=True,
-        coastlinecolor='rgb(80,80,80)',  # 更柔和的颜色
-        coastlinewidth=0.1,  # 更细的海岸线
-        showlakes=False,  # 隐藏湖泊
-        showrivers=False,  # 隐藏河流
-        showframe=False,  # 隐藏地图边框
-        showsubunits=False, # 关键参数：隐藏次级行政区划（包括小岛）❗
-        subunitwidth=0,     # 彻底隐藏次级边界
-        landcolor="rgb(245,245,220)",  # 米色陆地
-        oceancolor="rgb(173,216,230)",  # 浅蓝色海洋
-        projection_type="natural earth"  # 使用简化投影
-
+        countrycolor='rgb(150,150,150)',
+        countrywidth=0.5,
+        showframe=False,
+        projection_type="natural earth"
     )
     
     fig = go.Figure(data=traces)
     fig.update_layout(
-        title_text='全球供应链状态分析系统',
-        updatemenus=[dict(
-            type='dropdown',
-            direction='down',
-            active=0,
-            buttons=buttons,
-            x=0.12,
-            xanchor='left',
-            y=1.15
-        )],
+        title_text='全球供应链状态监控系统',
         geo=geo_config,
-        plot_bgcolor='rgba(255,255,255,0.9)',  # 画布背景色
-        height=750,
-        margin=dict(l=0, r=0, t=90, b=0)
+        updatemenus=[{
+            'buttons': [
+                dict(label='全部显示', method='update', args=[{"visible": [True]*len(traces)}]),
+                *[dict(label=f"仅显示：{status}",
+                      method='update',
+                      args=[{"visible": [t.meta['status'] == status or t.meta['status'] == 'base' for t in traces]}])
+                  for status in color_mapping]
+            ],
+            'direction': 'down',
+            'x': 0.1,
+            'y': 1.1
+        }],
+        height=800
     )
-
     return fig
-
 
 def get_layer(w):
     """权重值转中文层级"""
@@ -556,7 +665,7 @@ def get_layer(w):
     elif w >= 0.4: return 'Ⅱ级（次级影响）'
     else: return 'Ⅲ级（远端传导）'
 
-    
+
 # 生成可视化图表
-fig = create_map_figure(status_data)
+fig = create_map_figure(status_data, max_line_width=15)
 fig.show()

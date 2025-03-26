@@ -782,7 +782,7 @@ with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', 'w', encodin
           "name": "C6",
           "status": "transfer",
           "start": "2024-01-01",
-          "end": None
+          "end": "2024-12-31"
         }
       ],
       "final_status": "limit_day_break",
