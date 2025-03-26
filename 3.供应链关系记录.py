@@ -760,7 +760,7 @@ with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', 'w', encodin
 #     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
 
 
-# 数据结构片段解释：
+# region数据结构片段解释：
 '''
 	{
   "S1": [
@@ -792,6 +792,10 @@ with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', 'w', encodin
   ]
 }
 '''
+
+#endregion数据结构片段解释
+
+
 #endregion 以下是需要执行两遍的代码，两个chains分别执行一遍，并记得更改最终形成的json文件名
 
 #endregion 供应链长链建立

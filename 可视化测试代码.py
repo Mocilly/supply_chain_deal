@@ -279,15 +279,48 @@ class SupplyChainAnalyzer:
     
 #endregion 方法，类合集
 
+# region数据结构片段解释：
+'''
+	{
+  "S1": [
+    {
+      "path": [
+        {
+          "name": "C4", 
+          "status": "permanent_break",
+          "start_time": "2023-01-01",
+          "end": "2023-12-31"
+        },
+        {
+          "name": "C5",
+          "status": None,
+          "start": None,
+          "end": None
+        },
+        {
+          "name": "C6",
+          "status": "transfer",
+          "start": "2024-01-01",
+          "end": "2024-12-31"
+        }
+      ],
+      "final_status": "limit_day_break",
+      "start_time": "2023-01-01",
+      "end_time": "2025-01-01"
+    }
+  ]
+}
+'''
 
-
+#endregion数据结构片段解释
+# region 数据读取与加载
 import json
 import plotly.graph_objects as go
 
-# with open(path_dic['middle'] + '\\' + 'company.json', 'r') as f:
-#     loaded_company_data = json.load(f)
-with open(r'C:\Users\32915\Desktop\研创文件\company.json', 'r') as f:
+with open(path_dic['middle'] + '\\' + 'company.json', 'r') as f:
     loaded_company_data = json.load(f)
+# with open(r'C:\Users\32915\Desktop\研创文件\company.json', 'r') as f:
+#     loaded_company_data = json.load(f)
 
 #重建company对象
 companies = dict()
@@ -304,8 +337,11 @@ for company,info in companies.items():
     
 
 
-# 读取数据（需要替换为实际路径）
-with open(r'C:\Users\32915\Desktop\研创文件\complete_supply_chains.json', 'r', encoding='utf-8') as f:
+# # 读取数据（需要替换为实际路径）
+# with open(r'C:\Users\32915\Desktop\研创文件\complete_supply_chains.json', 'r', encoding='utf-8') as f:
+#     loaded_data = json.load(f)
+
+with open(path_dic['middle'] + '\\' + 'complete_supply_chains.json', 'r', encoding='utf-8') as f:
     loaded_data = json.load(f)
 
 path_lines = []
@@ -354,7 +390,7 @@ for initial_node, chains in loaded_data.items():
 for path in path_lines[:10]:
     print(path)
 
-
+#endregion 数据读取与加载
 
 
 
@@ -458,7 +494,7 @@ country_coords = {
 }
 #endregion国家地理坐标（经度，纬度）
 
-# region ###################################################### 统计逻辑实现
+# region ###################################################### 统计逻辑实现  （更改统计规则从此处入手，或者从数据加载层面入手）
 def analyze_paths(path_lines):
     """
     修复版数据分析函数
@@ -504,33 +540,29 @@ def analyze_paths(path_lines):
             if not all([start_country, end_country]):
                 continue
                 
-            # 处理永久断裂
             if status == 'permanent_break':
-                # 层级计算
-                if current_chain:
+                # 处理CN起始的段，强制创建新层级
+                if start_country == 'CN':
+                    layer = 1
+                    current_chain = {'layer': layer, 'origin': 'CN'}
+                elif current_chain and current_chain['origin'] == 'CN':
+                    # 非CN段，仅在现有链条中递增层级
                     layer = current_chain['layer'] + 1
-                else:  # 新链条必须起始于中国
-                    if start_country == 'CN':
-                        layer = 1
-                    else:
-                        continue
-                    current_chain = {'layer': layer}
+                    current_chain['layer'] = layer
+                else:
+                    continue  # 忽略非CN且无链条的段
                 
-                # 权重计算
-                is_limit_break = (
-                    final_status == 'limit_day_break' and 
-                    (idx == len(segments)-1 and status != 'permanent_break')
-                )
-                
-                weight = (
-                    0.1 * {1:1.0, 2:0.7, 3:0.4}.get(layer, 0) 
-                    if is_limit_break 
-                    else {1:1.0, 2:0.5, 3:0.1}.get(layer, 0)
-                )
-                
-                # 记录数据
-                key = (start_country, end_country)
-                status_records['permanent_break'][key] += weight
+                # 计算权重
+                if start_country == 'CN':
+                    is_limit_break = (
+                        final_status == 'limit_day_break' and 
+                        (idx == len(segments)-1 and segments[-1][2] != 'permanent_break')
+                    )
+                    layer_weights = {1: 1.0, 2: 0.7, 3: 0.4} if is_limit_break else {1: 1.0, 2: 0.5, 3: 0.1}
+                    weight = layer_weights.get(layer, 0) * (0.1 if is_limit_break else 1)
+                    
+                    key = (start_country, end_country)
+                    status_records['permanent_break'][key] += weight
             
             # 处理其他状态
             elif status in ('transfer', 'recovered'):
@@ -541,13 +573,15 @@ def analyze_paths(path_lines):
     return status_records
 
 status_data = analyze_paths(path_lines)
-
 count = 0
+# 调试：打印前5条记录
 for key,value in status_data.items():
     print(key,value)
     count+=1
-    if count > 20:
+    if count > 3:
         break
+
+
 print("\n原始状态数据样本：")
 for status in ['permanent_break', 'transfer', 'recovered']:
     print(f"{status}: {list(status_data[status].items())[:3]}")
@@ -629,20 +663,48 @@ def create_map_figure(status_data, max_line_width=15):
                 meta={'status': status}
             ))
 
-    # 可视化控制（简化配置）
+    # # 可视化控制（简化配置）
     geo_config = dict(
         resolution=110,
         showcountries=True,
         countrycolor='rgb(150,150,150)',
         countrywidth=0.5,
         showframe=False,
-        projection_type="natural earth"
+        projection_type="natural earth",
+        projection=dict(
+            scale=1.5,  # 放大初始显示比例
+        )
     )
+
+    #     # 修改地理参数配置
+    # geo_config = dict(
+    #     resolution=110,
+    #     showcountries=True,
+    #     countrycolor='rgb(150,150,150)',
+    #     countrywidth=0.5,
+    #     showframe=False,
+    #     # projection_type="orthographic",  # 改用正交投影
+    #     projection_type="natural earth",  # 改用自然地球投影
+    #     projection=dict(
+    #         scale=1.5,  # 放大初始显示比例
+    #         rotation=dict(lon=104, lat=35, roll=0)  # 中心点对准中国
+    #     ),
+    #     bgcolor='rgba(255,255,255,0.2)',  # 可选：背景透明化
+    #     landcolor='rgb(240,240,240)',      # 陆地颜色
+    #     lataxis_showgrid=True,             # 显示经纬网格
+    #     lonaxis_showgrid=True
+    # )
     
     fig = go.Figure(data=traces)
     fig.update_layout(
-        title_text='全球供应链状态监控系统',
         geo=geo_config,
+        # 标题设置（关键修改）
+        title_text='全球供应链状态监控系统',
+        title_font=dict(size=24, family='SimHei'),  # 设置字体
+        title_x=0.5,  # 水平居中
+        title_y=0.95,  # 垂直位置（0-1范围）
+        title_xanchor='center',
+
         updatemenus=[{
             'buttons': [
                 dict(label='全部显示', method='update', args=[{"visible": [True]*len(traces)}]),
@@ -653,9 +715,13 @@ def create_map_figure(status_data, max_line_width=15):
             ],
             'direction': 'down',
             'x': 0.1,
-            'y': 1.1
+            'y': 1
         }],
-        height=800
+        height=1000,  # 调高画布
+        width=1600,   # 调宽画布
+        margin=dict(l=0, r=0, b=0, t=40),  # 边距最小化
+        # 禁用缩放回调（关键！）
+        # uirevision='fixed-view'
     )
     return fig
 
