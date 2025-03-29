@@ -243,43 +243,10 @@ class SupplyChainAnalyzer:
         return self.filter_duplicate_chains(valid_chains) 
 
     
-    # def detect_transfers(self) -> List[Dict]:
-    #     """优化后的产业转移检测"""
-    #     transfers = []
-        
-    #     for supplier in self.graph.values():
-    #         sorted_rels = sorted(supplier, key=lambda x: x.start)
-            
-    #         for i in range(1, len(sorted_rels)):
-    #             prev = sorted_rels[i-1]
-    #             curr = sorted_rels[i]
-                
-    #             # 转移成立条件
-    #             time_condition = curr.start - prev.end > self.recovery_period
-    #             client_change = prev.to_co != curr.to_co
-    #             status_condition = prev.status in ("permanent_break","recovered",'active') #如果前一状态是recovered，那下一节点也可以转移
-    #             # print('转移检测')
-    #             # print(f"转移检测情况：time_condition:{time_condition} + client_change:{client_change} + status_condition:{status_condition}")
-    #             # print(f'间隔时间：{curr.start - prev.end}')
-    #             # print(f'前一节点的状态：{prev.status}')
-    #             # print(f'现在节点的状态：{curr.status}')
-    #             if time_condition and client_change and status_condition:
-    #                 # print('转移成立')
-    #                 prev.status = 'permanent_break'
-    #                 curr.status = 'transfer'
-    #                 transfers.append({
-    #                     'supplier': prev.from_co.id,
-    #                     'from_client': prev.to_co.id,
-    #                     'to_client': curr.to_co.id,
-    #                     'transfer_date': curr.start,
-    #                     'gap_days': (curr.start - prev.end).days
-    #                 })
-                    
-    #     return transfers
-    
 #endregion 方法，类合集
 
 # region数据结构片段解释：
+
 '''
 	{
   "S1": [
@@ -288,7 +255,7 @@ class SupplyChainAnalyzer:
         {
           "name": "C4", 
           "status": "permanent_break",
-          "start_time": "2023-01-01",
+          "start": "2023-01-01",
           "end": "2023-12-31"
         },
         {
@@ -313,6 +280,7 @@ class SupplyChainAnalyzer:
 '''
 
 #endregion数据结构片段解释
+
 # region 数据读取与加载
 import json
 import plotly.graph_objects as go
@@ -344,154 +312,314 @@ for company,info in companies.items():
 with open(path_dic['middle'] + '\\' + 'complete_supply_chains.json', 'r', encoding='utf-8') as f:
     loaded_data = json.load(f)
 
-path_lines = []
+def parse_date(date_str):
+    """解析日期字符串为datetime对象，时间强制为00:00:00，空值返回None"""
+    if not date_str:
+        return None
+    try:
+        # 直接解析为datetime，时间部分自动为0
+        return datetime.fromisoformat(date_str)
+    except ValueError:
+        return None
 
-# 遍历每个初始节点（如 S1）
-for initial_node, chains in loaded_data.items():
-    # 遍历该初始节点下的所有链条
-    for chain in chains:
-        path_segments = []
-        nodes = chain.get('path', [])
-        final_status = chain.get('final_status', '')
+
+
+def rebuild_relations(loaded_data:dict)->List[SupplyRelation]:
+
+    """重建供应链关系对象"""
+    relations = []
+    for initial_node, chains in loaded_data.items():
+        #  遍历该初始节点下的所有链条
+        for chain in chains:
+            nodes = chain.get('path', [])
+            final_status = chain.get('final_status', '')
+            start_time = parse_date(chain.get('start_time', None))
+            end_time = parse_date(chain.get('end_time', None))
+            rel = []
+  
+            #  生成初始节点到第一个节点的边（核心逻辑）
+            if nodes:
+                first_node = nodes[0]
+                # 构建初始关系
+                sr =SupplyRelation(companies[initial_node],
+                                   companies[first_node['name']],
+                                   parse_date(first_node['start']), 
+                                   parse_date(first_node['end']),
+                                   )
+                sr.status = first_node['status']
+                rel.append(sr)
+                 # 生成后续节点间的供应关系
+                for i in range(1,len(nodes)-1,2):
+                    from_co = companies[nodes[i]['name']]
+                    to_co = companies[nodes[i+1]['name']]
+                    start = parse_date(nodes[i+1]['start'])
+                    end = parse_date(nodes[i+1]['end'])
+                    status = nodes[i+1].get('status')
+                    supply_sc = SupplyRelation(from_co, to_co, start, end)
+                    supply_sc.status = status
+                    rel.append(supply_sc)
+                rel.append([final_status,start_time,end_time])
+                relations.append(rel)
+    return relations
+
+relations = rebuild_relations(loaded_data=loaded_data)
+
+for rel in relations[:10]:
+    print(rel)
+    
+
+len(relations)
+
+def generate_path_lines(relations, filter_start, filter_end):
+    result = []
+    for chain in relations:
+        # 分离供应链关系数据 和 供应链状态数据
+        supply_chain = [r for r in chain if isinstance(r, SupplyRelation)]
+        chain_status = chain[-1]
         
-        # 生成初始节点到第一个节点的边（核心新增逻辑）
-        if nodes:
-            first_node = nodes[0]
-            initial_segment = f"{initial_node}→{first_node['name']}"
-            # 添加第一个节点的状态
-            if first_node.get('status') and str(first_node['status']).lower() != 'none':
-                initial_segment += f"({first_node['status']})"
-            path_segments.append(initial_segment)
+        if not supply_chain or not chain_status:
+            continue
             
-            # 生成后续节点间的边
-            for i in range(len(nodes)-1):
-                source = nodes[i]['name']
-                target = nodes[i+1]['name']
-                status = nodes[i+1].get('status')
-                
-                if source == target:  # 过滤自循环边
-                    continue
-                
-                # 构建边描述
-                segment = f"{source}→{target}"
-                if status and str(status).lower() != 'none':
-                    segment += f"({status})"
-                path_segments.append(segment)
+        final_status = chain_status[0]
         
-        # 拼接完整路径
-        if path_segments:
-            full_path = " → ".join(path_segments)
-            # 添加最终状态
-            if final_status:
-                full_path += f"[{final_status}]"
-            path_lines.append(full_path)
+        # 第一阶段：标记所有有效节点
+        valid_indices = [
+            i for i, rel in enumerate(supply_chain)
+            if rel.start <= filter_end and rel.end >= filter_start
+        ]
+        
+        # 第三阶段：构建输出路径
+        if valid_indices:
+            rels = []
+            for i in valid_indices:
+                sc = supply_chain[i]
+                single_rel = '→'.join([sc.from_co.id,sc.to_co.id,]) + f'({sc.status})'
+                rels.append(single_rel)
 
-# 示例输出
-for path in path_lines[:10]:
-    print(path)
+            path_str = " → ".join(r for r in rels)
+    
+            # 判断是否为原链末尾
+            if valid_indices[-1] == len(supply_chain) - 1:
+                path_str += f"[{final_status}]"
+                
+            result.append(path_str)
+            
+    return result
 
 #endregion 数据读取与加载
+
+
+
+#region ----------------------------------------两任期数据切换 （重要）----------------------
+# path_lines_Trump = generate_path_lines(relations=relations,
+#                                        filter_start=datetime(2016,11,9),
+#                                        filter_end=datetime(2020,12,14))
+path_lines_Biden = generate_path_lines(relations=relations,
+                                       filter_start=datetime(2020,11,9),
+                                       filter_end=datetime(2024,12,31))
+
+# len(path_lines_Trump)
+
+# for rel in path_lines_Trump[:1000]:
+#     print(rel)
+
+
+# path_lines = path_lines_Trump
+path_lines = path_lines_Biden
+
+#endregion -------------------------------------两任期数据切换 （重要）--------------------------
+
 
 
 
 #region国家地理坐标（经度，纬度）
 country_coords = {
     # 主權國家
-    "AE": [54.3000, 23.4241],     # 阿联酋
-    "AR": [-63.6167, -38.4161],   # 阿根廷
-    "AT": [14.5500, 47.5162],     # 奥地利
-    "AU": [133.7751, -25.2744],   # 澳大利亚
-    "BA": [17.6790, 43.9159],     # 波黑
+    "CN": [116.4074, 39.9042],    # 中国
+    'CN_2':[100.2653, 30.6041], #（中国位置2）
+    "AE": [54.3667, 24.4667],     # 阿拉伯联合酋长国
+    "AF": [69.2075, 34.5553],     # 阿富汗
+    "AL": [19.8190, 41.3275],     # 阿尔巴尼亚
+    "AR": [-58.3816, -34.6037],   # 阿根廷
+    "AT": [16.3738, 48.2082],     # 奥地利
+    "AU": [149.1300, -35.2809],   # 澳大利亚
+    "AZ": [49.8920, 40.4093],     # 阿塞拜疆
+    "BA": [18.4131, 43.8563],     # 波黑
     "BD": [90.4125, 23.6850],     # 孟加拉国
-    "BE": [4.4699, 50.5039],      # 比利时
-    "BG": [25.4858, 42.7339],     # 保加利亚
-    "BH": [50.5577, 26.0667],     # 巴林
-    "BM": [-64.7500, 32.2948],    # 百慕大（英国海外领地）
-    "BR": [-51.9253, -14.2350],   # 巴西
-    "BS": [-77.3961, 25.0343],    # 巴哈马
-    "BW": [24.0000, -22.0000],    # 博茨瓦纳
-    "CA": [-106.3468, 56.1304],   # 加拿大
-    "CH": [8.2275, 46.8182],      # 瑞士
-    "CI": [-5.5471, 7.5400],      # 科特迪瓦
-    "CL": [-71.5429, -35.6751],   # 智利
-    "CM": [12.3547, 7.3697],      # 喀麦隆
-    "CN": [104.1954, 35.8617],    # 中国
-    "CO": [-74.2973, 4.5709],     # 哥伦比亚
-    "CR": [-83.7534, 9.7489],     # 哥斯达黎加
-    "CY": [33.4299, 35.1264],     # 塞浦路斯
-    "CZ": [15.4729, 49.8175],     # 捷克
-    "DE": [10.4515, 51.1657],     # 德国
-    "DK": [9.5018, 56.2639],      # 丹麦
-    "EE": [25.0136, 58.5953],     # 爱沙尼亚
-    "EG": [30.8025, 26.8206],     # 埃及
-    "ES": [-3.7492, 40.4637],     # 西班牙
-    "FI": [25.7482, 61.9241],     # 芬兰
-    "FO": [-6.9118, 61.8926],     # 法罗群岛（丹麦自治领）
-    "FR": [2.2137, 46.2276],      # 法国
-    "GA": [11.6094, -0.8037],     # 加蓬
-    "GB": [-3.43597, 55.3781],    # 英国
-    "GE": [43.3569, 42.3154],     # 格鲁吉亚
-    "GH": [-1.0232, 7.9465],      # 加纳
-    "GR": [21.8243, 39.0742],     # 希腊
-    "HK": [114.1694, 22.3193],    # 中国香港特别行政区
-    "HR": [15.2000, 45.1000],     # 克罗地亚
-    "HU": [19.5033, 47.1625],     # 匈牙利
-    "ID": [113.9213, -0.7893],    # 印度尼西亚
-    "IE": [-8.2439, 53.4129],     # 爱尔兰
-    "IL": [34.8516, 31.0461],     # 以色列
-    "IN": [78.9629, 20.5937],     # 印度
-    "IS": [-19.0208, 64.9631],    # 冰岛
-    "IT": [12.5674, 41.8719],     # 意大利
-    "JP": [138.2529, 36.2048],    # 日本
-    "KE": [37.9062, -0.0236],     # 肯尼亚
-    "KR": [127.7669, 35.9078],    # 韩国
-    "KW": [47.4818, 29.3117],     # 科威特
-    "KZ": [66.9237, 48.0196],     # 哈萨克斯坦
-    "LB": [35.8623, 33.8547],     # 黎巴嫩
-    "LK": [80.7718, 7.8731],      # 斯里兰卡
-    "LT": [23.8813, 55.1694],     # 立陶宛
-    "LU": [6.1296, 49.8153],      # 卢森堡
-    "LV": [24.6032, 56.8796],     # 拉脱维亚
-    "MA": [-7.0926, 31.7917],     # 摩洛哥
-    "MX": [-102.5528, 23.6345],   # 墨西哥
-    "MY": [109.6976, 3.1409],     # 马来西亚
-    "NG": [8.6753, 9.0820],       # 尼日利亚
-    "NL": [5.2913, 52.1326],      # 荷兰
-    "NO": [8.4689, 60.4720],      # 挪威
-    "NZ": [174.7762, -40.9006],   # 新西兰
-    "OM": [55.9233, 21.4735],     # 阿曼
-    "PE": [-75.0152, -9.1899],    # 秘鲁
-    "PH": [121.7740, 12.8797],    # 菲律宾
-    "PK": [69.3451, 30.3753],     # 巴基斯坦
-    "PL": [19.1451, 51.9194],     # 波兰
-    "PT": [-8.2245, 39.3999],     # 葡萄牙
-    "QA": [51.1839, 25.3548],     # 卡塔尔
-    "RO": [24.9668, 45.9432],     # 罗马尼亚
-    "RU": [105.3188, 61.5240],    # 俄罗斯
-    "SA": [45.0792, 23.8859],     # 沙特阿拉伯
-    "SE": [18.6435, 60.1282],     # 瑞典
-    "SG": [103.8198, 1.3521],     # 新加坡
-    "TH": [100.9925, 15.8700],    # 泰国
-    "TR": [35.2433, 38.9637],     # 土耳其
-    "TW": [120.9605, 23.6978],    # 中国台湾地区
-    "UA": [31.1656, 48.3794],     # 乌克兰
-    "US": [-95.7129, 37.0902],    # 美国
-    "ZA": [22.9375, -30.5595],    # 南非
-    "ZW": [29.1549, -19.0154],    # 津巴布韦
+    "BE": [4.3517, 50.8503],      # 比利时
+    "BF": [-1.5197, 12.3681],     # 布基纳法索
+    "BG": [23.3241, 42.6977],     # 保加利亚
+    "BO": [-68.1193, -16.4897],   # 玻利维亚
+    "BR": [-47.9297, -15.7801],   # 巴西
+    "CA": [-75.6972, 45.4215],    # 加拿大
+    "CD": [15.2662, -4.3224],     # 刚果民主共和国（刚果金）
+    "CH": [7.4474, 46.9480],      # 瑞士
+    "CL": [-70.6483, -33.4489],   # 智利
 
-    # 特殊地区
-    "GI": [-5.3454, 36.1408],     # 直布罗陀（英国海外领地）
-    "GG": [-2.5853, 49.4657],     # 根西岛（英国皇家属地）
-    "JE": [-2.1312, 49.2144],     # 泽西岛（英国皇家属地）
-    "MO": [113.5439, 22.1987],    # 中国澳门特别行政区
-    "PR": [-66.5901, 18.2208],    # 波多黎各（美国自由邦）
-    "PS": [35.2332, 31.9522],     # 巴勒斯坦（争议地区）
-    "VI": [-64.8963, 18.3358],    # 美属维尔京群岛
-    
+    "CO": [-74.0721, 4.7110],     # 哥伦比亚
+    "CU": [-82.3666, 23.1136],    # 古巴
+    "CZ": [14.4378, 50.0755],     # 捷克
+    "DE": [13.4049, 52.5200],     # 德国
+    "DK": [12.5683, 55.6761],     # 丹麦
+    "DZ": [3.0588, 36.7538],      # 阿尔及利亚
+    "EC": [-78.4678, -0.1807],    # 厄瓜多尔
+    "EG": [31.2357, 30.0444],     # 埃及
+    "ES": [-3.7038, 40.4168],     # 西班牙
+    "FI": [24.9384, 60.1699],     # 芬兰
+    "FR": [2.3522, 48.8566],      # 法国
+    "GB": [-0.1276, 51.5072],     # 英国
+    "GE": [44.8271, 41.7151],     # 格鲁吉亚
+    "GH": [-0.1866, 5.6037],      # 加纳
+    "GR": [23.7275, 37.9838],     # 希腊
+    "GT": [-90.5150, 14.6349],    # 危地马拉
+    "HN": [-87.2044, 14.0818],    # 洪都拉斯
+    "HR": [16.0015, 45.8150],     # 克罗地亚
+    "HU": [19.0402, 47.4979],     # 匈牙利
+    "ID": [106.8650, -6.1751],    # 印度尼西亚
+    "IE": [-6.2603, 53.3498],     # 爱尔兰
+    "IL": [34.7818, 32.0853],     # 以色列
+    "IN": [77.2090, 28.6139],     # 印度
+    "IQ": [44.3615, 33.3152],     # 伊拉克
+    "IR": [51.3890, 35.6892],     # 伊朗
+    "IS": [-21.9426, 64.1466],    # 冰岛
+    "IT": [12.4964, 41.9028],     # 意大利
+    "JM": [-76.7930, 17.9714],    # 牙买加
+    "JO": [35.9106, 31.9539],     # 约旦
+    "JP": [139.6917, 35.6895],    # 日本
+    "KE": [36.8219, -1.2864],     # 肯尼亚
+    "KR": [126.9780, 37.5665],    # 韩国
+    "KW": [47.9783, 29.3759],     # 科威特
+    "KZ": [71.4491, 51.1605],     # 哈萨克斯坦
+    "LB": [35.4955, 33.8886],     # 黎巴嫩
+    "LK": [79.8612, 6.9271],      # 斯里兰卡
+    "MA": [-6.8326, 34.0133],     # 摩洛哥
+    "MX": [-99.1332, 19.4326],    # 墨西哥
+    "MY": [101.6869, 3.1390],     # 马来西亚
+    "NG": [7.4891, 9.0579],       # 尼日利亚
+    "NL": [4.8952, 52.3702],      # 荷兰
+    "NO": [10.7522, 59.9139],     # 挪威
+    "NP": [85.3240, 27.7172],     # 尼泊尔
+    "NZ": [174.7772, -41.2865],   # 新西兰
+    "PE": [-77.0428, -12.0464],   # 秘鲁
+    "PH": [120.9842, 14.5995],    # 菲律宾
+    "PK": [73.0479, 33.6844],     # 巴基斯坦
+    "PL": [21.0175, 52.2297],     # 波兰
+    "PR": [-66.1057, 18.4663],    # 波多黎各（美国自由邦）
+    "PT": [-9.1393, 38.7223],     # 葡萄牙
+    "PY": [-57.5759, -25.2637],   # 巴拉圭
+    "QA": [51.5310, 25.2854],     # 卡塔尔
+    "RO": [26.1025, 44.4268],     # 罗马尼亚
+    "RU": [37.6173, 55.7558],     # 俄罗斯
+    "SA": [46.7219, 24.7136],     # 沙特阿拉伯
+    "SE": [18.0686, 59.3293],     # 瑞典
+    "SG": [103.8198, 1.3521],     # 新加坡
+    "TH": [100.5018, 13.7563],    # 泰国
+    "TN": [10.1815, 36.8065],     # 突尼斯
+    "TR": [32.8597, 39.9334],     # 土耳其
+    "TW": [121.5654, 25.0330],    # 台湾地区（中国的省份）
+    "UA": [30.5234, 50.4501],     # 乌克兰
+    "US": [-77.0369, 38.9072],    # 美国
+    "UY": [-56.1645, -34.9011],   # 乌拉圭
+    "VE": [-66.9036, 10.4806],    # 委内瑞拉
+    "VN": [105.8342, 21.0278],    # 越南
+    "ZA": [28.1871, -25.7460],    # 南非
+    "ZW": [31.0522, -17.8249],    # 津巴布韦
+    "HK": [114.1694, 22.3193],    # 香港（中国特别行政区）
+    "MO": [113.5439, 22.1987],    # 澳门（中国特别行政区）
+    # 主權國家（新增）
+    "AD": [1.5218, 42.5063],      # 安道尔
+    "AG": [-61.7968, 17.0770],    # 安提瓜和巴布达
+    "AM": [44.5035, 40.1776],     # 亚美尼亚
+    "AO": [13.2345, -8.8390],     # 安哥拉
+    "AW": [-69.9772, 12.5211],    # 阿鲁巴（荷兰海外领地）
+    "AZ": [49.8920, 40.4093],     # 阿塞拜疆
+    "BB": [-59.5988, 13.1132],    # 巴巴多斯
+    "BH": [50.5577, 26.2285],     # 巴林
+    "BJ": [2.6323, 6.4969],       # 贝宁
+    "BN": [114.9422, 4.9031],     # 文莱
+    "BS": [-77.3500, 25.0343],    # 巴哈马
+    "BT": [89.6380, 27.4728],     # 不丹
+    "BW": [25.9201, -24.6533],    # 博茨瓦纳
+    "BZ": [-88.7667, 17.2510],    # 伯利兹
+    "CF": [18.5582, 4.3947],      # 中非共和国
+    "CI": [-5.5471, 7.5390],      # 科特迪瓦
+    "CM": [11.5150, 3.8480],      # 喀麦隆
+    "CV": [-23.5088, 14.9330],    # 佛得角
+    "CY": [33.3823, 35.1856],     # 塞浦路斯
+    "DJ": [42.5903, 11.5720],     # 吉布提
+    "DM": [-61.3700, 15.2976],    # 多米尼克
+    "ER": [38.9318, 15.3229],     # 厄立特里亚
+    "ET": [38.7578, 8.9806],      # 埃塞俄比亚
+    "FJ": [178.4419, -18.1416],   # 斐济
+    "FM": [158.1623, 6.8875],     # 密克罗尼西亚
+    "GA": [9.4673, 0.4162],       # 加蓬
+    "GD": [-61.6900, 12.0500],    # 格林纳达
+    "GG": [-2.5853, 49.4667],     # 根西岛（英国皇家属地）
+    "GM": [-16.5778, 13.4557],    # 冈比亚
+    "GQ": [8.7833, 3.7500],       # 赤道几内亚
+    "GY": [-58.1551, 6.8013],     # 圭亚那
+    "HT": [-72.3381, 18.5944],    # 海地
+    "JE": [-2.1310, 49.2144],     # 泽西岛（英国皇家属地）
+    "KM": [43.2551, -11.7022],    # 科摩罗
+    "LA": [102.6300, 17.9628],    # 老挝
+    "LB": [35.4955, 33.8886],     # 黎巴嫩
+    "LI": [9.5557, 47.1410],      # 列支敦士登
+    "LR": [-10.7972, 6.3008],     # 利比里亚
+    "LS": [27.4869, -29.3100],    # 莱索托
+    "LU": [6.1319, 49.6116],      # 卢森堡
+    "LV": [24.0934, 56.9496],     # 拉脱维亚
+    "MC": [7.4246, 43.7384],      # 摩纳哥
+    "MD": [28.8614, 47.0105],     # 摩尔多瓦
+    "MG": [47.5136, -18.9141],    # 马达加斯加
+    "MK": [21.4314, 41.9973],     # 北马其顿
+    "ML": [-8.0029, 12.6392],     # 马里
+    "MR": [-15.9780, 18.0735],    # 毛里塔尼亚
+    "MU": [57.5000, -20.3480],    # 毛里求斯
+    "MV": [73.5109, 4.1755],      # 马尔代夫
+    "MW": [33.7878, -13.9669],    # 马拉维
+    "NA": [17.0934, -22.5609],    # 纳米比亚
+    "NE": [2.1098, 13.5136],      # 尼日尔
+    "PG": [147.1803, -9.4438],    # 巴布亚新几内亚
+    "RW": [30.0619, -1.9500],     # 卢旺达
+    "SC": [55.4540, -4.6221],     # 塞舌尔
+    "SL": [-13.2317, 8.4840],     # 塞拉利昂
+    "SM": [12.4473, 43.9356],     # 圣马力诺
+    "SN": [-17.4467, 14.7167],    # 塞内加尔
+    "SO": [45.3182, 2.0469],      # 索马里
+    "SR": [-55.1699, 5.8520],     # 苏里南
+    "ST": [6.7333, 0.3365],       # 圣多美和普林西比
+    "SY": [36.2765, 33.5131],     # 叙利亚
+    "SZ": [31.1461, -26.3200],    # 斯威士兰
+    "TD": [15.0444, 12.1347],     # 乍得
+    "TL": [125.5617, -8.5537],    # 东帝汶
+    "TM": [58.3833, 37.9500],     # 土库曼斯坦
+    "TO": [-175.2018, -21.1393],  # 汤加
+    "TV": [179.1945, -8.5212],    # 图瓦卢
+    "TZ": [35.7384, -6.1629],     # 坦桑尼亚
+    "UZ": [69.2401, 41.2995],     # 乌兹别克斯坦
+    "VU": [168.3228, -17.7333],   # 瓦努阿图
+    "WS": [-171.7516, -13.8333],  # 萨摩亚
+ 
+    # 特殊地区（新增）
+
+
+    # 部分特殊地区
+
+    "VG": [-64.6208, 18.4286],    # 英属维尔京群岛（英国海外领土）
+    "KY": [-81.3744, 19.3133],    # 开曼群岛（英国海外领土）
+    "BM": [-64.7500, 32.2948],    # 百慕大（英国海外领地）
+    "FO": [-6.7710, 61.8926],     # 法罗群岛（丹麦自治领）
+    "GF": [-52.3333, 4.9333],     # 法属圭亚那（法国海外省）
+    "GL": [-51.6941, 64.1814],    # 格陵兰（丹麦自治领）
+    "PF": [-149.5667, -17.5333],  # 法属波利尼西亚（法国海外集体）
+    "RE": [55.4542, -20.8784],    # 留尼汪（法国海外省）
+    "VI": [-64.9344, 18.3417],    # 美属维尔京群岛
+
     # 特殊标记
     "Multi_Nations": None,          # 多国共有区域（需根据具体案例定义）
     "Nation Not_Found": None      # 无法识别的代码
 }
+
 #endregion国家地理坐标（经度，纬度）
 
 # region ###################################################### 统计逻辑实现  （更改统计规则从此处入手，或者从数据加载层面入手）
@@ -588,8 +716,8 @@ for status in ['permanent_break', 'transfer', 'recovered']:
 # endregion
 
 
-
-def create_map_figure(status_data, max_line_width=15):
+# region创建地图图形
+def create_map_figure(status_data,country:str, line_width_list=[]):
     traces = []
     color_mapping = {
         'permanent_break': 'rgb(230,50,50)',  # 红色
@@ -632,25 +760,40 @@ def create_map_figure(status_data, max_line_width=15):
             
         max_weight = max(data.values()) if data else 1
         print(f"\n处理{status}，最大权重：{max_weight}")
-        
+        sum_weights = sum([weight for (start, end), weight in data.items()])
         for i, ((start, end), weight) in enumerate(data.items()):
             # 调试：打印前5条记录
             if i < 5:
+                print(f'总权重为：{sum_weights}')
                 print(f"  {start}→{end} 权重：{weight}")
+                print(f'分位数为：{weight/sum_weights*100}')
 
             # 国家节点过滤（添加调试）
             if start not in valid_countries or end not in valid_countries:
                 print(f"过滤无效节点：{start}→{end}")
                 continue
-                
+            
+            # 处理CN→CN的情况，使用CN_2作为终点坐标
+            original_end = end
+            if start == 'CN' and end == 'CN' and 'CN_2' in valid_countries:
+                end = country  # 替换为CN_2
+                # 确保替换后的国家有效
+                if end not in valid_countries:
+                    end = original_end  # 回退到原始国家
             # 坐标获取
             start_coord = valid_countries[start]
             end_coord = valid_countries[end]
             
-            # 线宽计算（确保最小可见性）
-            line_width = (weight / max_weight) * max_line_width
-            line_width = max(min(line_width, max_line_width), 2)  # 最小2px
-            
+            p1 = sum_weights*0.05
+            p2 = sum_weights*0.10
+            # 线宽计算
+            if weight < p1:
+                line_width = line_width_list[0]
+            elif weight < p2:
+                line_width = line_width_list[1]
+            else:
+                line_width = line_width_list[2]
+
             traces.append(go.Scattergeo(
                 lon=[start_coord[0], end_coord[0]],
                 lat=[start_coord[1], end_coord[1]],
@@ -733,5 +876,7 @@ def get_layer(w):
 
 
 # 生成可视化图表
-fig = create_map_figure(status_data, max_line_width=15)
+fig = create_map_figure(status_data,'CN_2', line_width_list=[1,6,12])
 fig.show()
+
+# endregion创建地图图形
