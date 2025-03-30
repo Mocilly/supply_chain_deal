@@ -427,6 +427,9 @@ path_lines_Biden = generate_path_lines(relations=relations,
 # path_lines = path_lines_Trump
 path_lines = path_lines_Biden
 
+for rel in path_lines[3000:4000]:
+    print(rel)
+
 #endregion -------------------------------------两任期数据切换 （重要）--------------------------
 
 
@@ -717,6 +720,7 @@ for status in ['permanent_break', 'transfer', 'recovered']:
 
 
 # region创建地图图形
+
 def create_map_figure(status_data,country:str, line_width_list=[]):
     traces = []
     color_mapping = {
@@ -784,15 +788,18 @@ def create_map_figure(status_data,country:str, line_width_list=[]):
             start_coord = valid_countries[start]
             end_coord = valid_countries[end]
             
-            p1 = sum_weights*0.05
-            p2 = sum_weights*0.10
+            p1 = sum_weights*0.10
+            p2 = sum_weights*0.20
+            p3 = sum_weights*0.30
             # 线宽计算
             if weight < p1:
                 line_width = line_width_list[0]
             elif weight < p2:
                 line_width = line_width_list[1]
-            else:
+            elif weight < p3:
                 line_width = line_width_list[2]
+            else:
+                line_width = line_width_list[3]
 
             traces.append(go.Scattergeo(
                 lon=[start_coord[0], end_coord[0]],
@@ -876,7 +883,8 @@ def get_layer(w):
 
 
 # 生成可视化图表
-fig = create_map_figure(status_data,'CN_2', line_width_list=[1,6,12])
+fig = create_map_figure(status_data,'CN_2', line_width_list=[1,6,10,15])
 fig.show()
 
 # endregion创建地图图形
+
