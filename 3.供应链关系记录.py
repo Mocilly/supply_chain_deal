@@ -327,16 +327,17 @@ for i,cop in enumerate(source_cop_set):
     column_set_1 = set(df["home_region"].dropna())
     column_set_2 = set(df["country"].dropna())
     column_set = column_set_1 | column_set_2
-    sc_status = []
+    sc_status = None
     if len(column_set) == 1:
-        sc_status.append(column_set.pop())
+        sc_status = column_set.pop()
     elif len(column_set) > 1:
-        sc_status.append('Multi_Nations')
+        # sc_status.append('Multi_Nations')
+        sc_status = '|'.join([country for country in list(column_set)])
     elif len(column_set) < 1:
-        sc_status.append('Nation_Not_Found')
+        sc_status = 'Nation_Not_Found'
 
     for r in df_sc_index_list:
-        df_sc.loc[r,'source_company_belong'] = sc_status[0]
+        df_sc.loc[r,'source_company_belong'] = sc_status
     
     print(f'已解决{i+1}/{len(source_cop_set)}')
 
