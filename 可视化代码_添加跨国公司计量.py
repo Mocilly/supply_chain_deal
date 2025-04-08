@@ -286,10 +286,10 @@ class SupplyChainAnalyzer:
 import json
 import plotly.graph_objects as go
 
-# with open(path_dic['middle'] + '\\' + 'company.json', 'r') as f:
-#     loaded_company_data = json.load(f)
-with open(r'C:\Users\32915\Desktop\company.json', 'r') as f:
+with open(path_dic['middle'] + '\\' + 'company.json', 'r') as f:
     loaded_company_data = json.load(f)
+# with open(r'C:\Users\32915\Desktop\company.json', 'r') as f:
+#     loaded_company_data = json.load(f)
 
 #重建company对象
 companies = dict()
@@ -309,22 +309,25 @@ for idx,company in enumerate(companies.values()):
       #新增多国家背景公司计量，将多国家背景公司的所属国家处理为列表
 
 # 用于处理多国家背景公司的国家字符串
-def split_countries(country_str: str) -> list:
+def split_countries(country_str: str) -> tuple:
     """智能分割国家字符串，自动检测分隔符"""
-    # 空值处理
-    if not isinstance(country_str, str) or not country_str.strip():
-        return []
     
+
     # 标准化字符串（去除前后空格）
     normalized = country_str.strip()
-    
+
+    # 空字符串直接返回空元组
+    if not normalized:
+        return ()
+    # 标准化字符串（去除前后空格）
     # 检测分隔符
     if '|' in normalized:
         # 分割并清理元素
-        return [c.strip() for c in normalized.split('|') if c.strip()]
+        country_list = [c for c in normalized.split('|')]
+        return tuple(country_list)
     else:
         # 返回单个国家列表
-        return [normalized]
+        return (normalized,)
 
 company_to_country = dict()
 for company,info in companies.items():
@@ -337,11 +340,11 @@ for idx,com_country in enumerate(company_to_country.items()):
     print(f'公司ID：国家 "{com_country}')
 
 # # 读取数据（需要替换为实际路径）
-with open(r'C:\Users\32915\Desktop\complete_supply_chains.json', 'r', encoding='utf-8') as f:
-    loaded_data = json.load(f)
-
-# with open(path_dic['middle'] + '\\' + 'complete_supply_chains.json', 'r', encoding='utf-8') as f:
+# with open(r'C:\Users\32915\Desktop\complete_supply_chains.json', 'r', encoding='utf-8') as f:
 #     loaded_data = json.load(f)
+
+with open(path_dic['middle'] + '\\' + 'complete_supply_chains.json', 'r', encoding='utf-8') as f:
+    loaded_data = json.load(f)
 
 def parse_date(date_str):
     """解析日期字符串为datetime对象，时间强制为00:00:00，空值返回None"""
@@ -416,7 +419,7 @@ def generate_path_lines(relations, filter_start, filter_end):
         # 第一阶段：标记所有有效节点
         valid_indices = [
             i for i, rel in enumerate(supply_chain)
-            if rel.start <= filter_end and rel.end >= filter_start
+            if rel.start >= filter_start and rel.end <= filter_end
         ]
         
         # 第三阶段：构建输出路径
@@ -442,21 +445,24 @@ def generate_path_lines(relations, filter_start, filter_end):
 
 
 #region ----------------------------------------两任期数据切换 （重要）----------------------
+path_lines_all = generate_path_lines(relations=relations,
+                                       filter_start=datetime(2016,11,9),
+                                       filter_end=datetime(2024,12,31))
 # path_lines_Trump = generate_path_lines(relations=relations,
 #                                        filter_start=datetime(2016,11,9),
 #                                        filter_end=datetime(2020,12,14))
-path_lines_Biden = generate_path_lines(relations=relations,
-                                       filter_start=datetime(2020,11,9),
-                                       filter_end=datetime(2024,12,31))
+# path_lines_Biden = generate_path_lines(relations=relations,
+#                                        filter_start=datetime(2020,12,14),
+#                                        filter_end=datetime(2024,12,31))
 
 # len(path_lines_Trump)
 
 # for rel in path_lines_Trump[:1000]:
 #     print(rel)
 
-
+path_lines = path_lines_all
 # path_lines = path_lines_Trump
-path_lines = path_lines_Biden
+# path_lines = path_lines_Biden
 
 for rel in path_lines[3000:4000]:
     print(rel)
@@ -657,7 +663,7 @@ country_coords = {
 #endregion国家地理坐标（经度，纬度）
 
 # region ###################################################### 统计逻辑实现  （更改统计规则从此处入手，或者从数据加载层面入手）
-def analyze_paths(path_lines):
+def analyze_paths(path_lines,source_country:str='CN'):
     """
     修复版数据分析函数
         供应链状态分析函数（最终版）
@@ -698,16 +704,16 @@ def analyze_paths(path_lines):
             start_country = company_to_country.get(start_comp)
             end_country = company_to_country.get(end_comp)
             
-            # 必须存在国家映射
+            # 必须存在国家映射 会检查两个变量是否均为“真值”（即非空、非None、非False等）
             if not all([start_country, end_country]):
                 continue
                 
             if status == 'permanent_break':
                 # 处理CN起始的段，强制创建新层级
-                if 'CN' in start_country and len (start_country) == 1:
+                if source_country in start_country and len (start_country) == 1:
                     layer = 1
-                    current_chain = {'layer': layer, 'origin': 'CN'}
-                elif current_chain and current_chain['origin'] == 'CN':
+                    current_chain = {'layer': layer, 'origin': source_country}
+                elif current_chain and current_chain['origin'] == source_country:
                     # 非CN段，仅在现有链条中递增层级
                     layer = current_chain['layer'] + 1
                     current_chain['layer'] = layer
@@ -715,7 +721,7 @@ def analyze_paths(path_lines):
                     continue  # 忽略非CN且无链条的段
                 
                 # 计算权重
-                if 'CN' in start_country:
+                if source_country in start_country:
                     is_limit_break = (
                         final_status == 'limit_day_break' and 
                         (idx == len(segments)-1 and segments[-1][2] != 'permanent_break')
@@ -723,25 +729,25 @@ def analyze_paths(path_lines):
                     layer_weights = {1: 1.0, 2: 0.7, 3: 0.4} if is_limit_break else {1: 1.0, 2: 0.5, 3: 0.1}
                     weight = layer_weights.get(layer, 0) * (0.1 if is_limit_break else 1)
                     
-                    key = (start_country, end_country)
-                    status_records['permanent_break'][key] += weight
+                    for target in end_country:
+                        key = (source_country, target)
+                        status_records['permanent_break'][key] += weight
             
             # 处理其他状态
             elif status in ('transfer', 'recovered'):
-                if 'CN' in start_country:
-                    status_records[status][(start_country, end_country)] += 1.0
+                if source_country in start_country:
+                    for target in end_country:
+                        status_records[status][(source_country, target)] += 1.0
                 current_chain = None
 
     return status_records
 
 status_data = analyze_paths(path_lines)
-count = 0
+
 # 调试：打印前5条记录
 for key,value in status_data.items():
     print(key,value)
-    count+=1
-    if count > 3:
-        break
+
 
 
 print("\n原始状态数据样本：")
@@ -761,7 +767,7 @@ def create_map_figure(status_data,country:str, line_width_list=[]):
     }
     valid_countries = {
         k: v for k, v in country_coords.items()
-        if k not in ['Multi_Nations', 'Nation Not_Found'] and v is not None
+        if k not in ['Nation Not_Found'] and v is not None
     }
     # 调试：打印有效国家列表
     print(f"有效国家数量：{len(valid_countries)}")
@@ -915,7 +921,10 @@ def get_layer(w):
 
 # 生成可视化图表
 fig = create_map_figure(status_data,'CN_2', line_width_list=[1,6,10,15])
+
+
 fig.show()
+
 
 # endregion创建地图图形
 
