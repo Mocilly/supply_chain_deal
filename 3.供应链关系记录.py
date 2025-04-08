@@ -306,10 +306,10 @@ df_cop = df_cop[['start_','end_','id','home_region','country']]
 df_cop
 
 
-source_cop_set = set()  # 供应链中的source公司集合  ,此处创建空集合  ,集合中只有唯一值，将所有公司储存进去
+all_cop_set = set()  # 供应链中的source公司集合  ,此处创建空集合  ,集合中只有唯一值，将所有公司储存进去
 
 for i in df_sc.index:
-    source_cop_set.add(df_sc.loc[i,'source_company_id'])
+    all_cop_set.add(df_sc.loc[i,'source_company_id'])
     print(f'已解决{i+1}')
 
 #这里还是要记录一下home_region和country不一样的公司，记为Multi_Nations
@@ -317,7 +317,7 @@ for i in df_sc.index:
 df_sc['source_company_belong'] = None
 df_sc.columns
 df_cop.columns
-for i,cop in enumerate(source_cop_set):
+for i,cop in enumerate(all_cop_set):
     
     condition_cop = (df_cop['id'] == cop)
     condition_sc = (df_sc['source_company_id'] == cop)
@@ -333,13 +333,14 @@ for i,cop in enumerate(source_cop_set):
     elif len(column_set) > 1:
         # sc_status.append('Multi_Nations')
         sc_status = '|'.join([country for country in list(column_set)])
-    elif len(column_set) < 1:
+    else:
         sc_status = 'Nation_Not_Found'
 
     for r in df_sc_index_list:
         df_sc.loc[r,'source_company_belong'] = sc_status
     
-    print(f'已解决{i+1}/{len(source_cop_set)}')
+    print(f'已解决{i+1}/{len(all_cop_set)}')
+
 
 df_sc['target_company_belong'] = None
 df_sc.columns
@@ -357,19 +358,54 @@ for i,cop in enumerate(target_cop_set):
     column_set_1 = set(df["home_region"].dropna())
     column_set_2 = set(df["country"].dropna())
     column_set = column_set_1 | column_set_2
-    sc_status = []
+    sc_status = None
     if len(column_set) == 1:
-        sc_status.append(column_set.pop())
+        sc_status = column_set.pop()
     elif len(column_set) > 1:
-        sc_status.append('Multi_Nations')
-    elif len(column_set) < 1:
-        sc_status.append('Nation_Not_Found')
+        # sc_status.append('Multi_Nations')
+        sc_status = '|'.join([country for country in list(column_set)])
+    else:
+        sc_status = 'Nation_Not_Found'
 
     for r in df_sc_index_list:
-        df_sc.loc[r,'target_company_belong'] = sc_status[0]
+        df_sc.loc[r,'target_company_belong'] = sc_status
     
     print(f'已解决{i+1}/{len(target_cop_set)}')
 
+# region 中间处理过程_1.2，删掉开头结尾的 | ，就不在中间处理过程_1上的原代码上作修改了
+
+for i in df_sc.index:
+    c_belong = df_sc.loc[i,'source_company_belong']
+    if c_belong.startswith('|'):
+        c_belong = c_belong[1:]
+    if c_belong.endswith('|'):
+        c_belong = c_belong[:-1]
+    df_sc.loc[i,'source_company_belong'] = c_belong
+    print(f'已解决{i+1}')
+
+df_sc[df_sc['target_company_belong'].isna()] #查看是否有空值
+#有空值说明上面的代码在处理国家所属的逻辑上还是有点问题的，但source_company_belong处理后并未出现空值，
+# 因此此处可能是supply_chain的target_company_id在company.dta中并不存在所致，所以我们将281个空值设为nation_not_found
+na_index = df_sc[df_sc['target_company_belong'].isna()].index
+len(na_index) #查看空值数量
+for i in na_index:
+    df_sc.loc[i,'target_company_belong'] = 'Nation_Not_Found'
+    print(f'已解决{i+1}')
+
+for i in df_sc.index:
+    c_belong = df_sc.loc[i,'target_company_belong']
+    if c_belong.startswith('|'):
+        c_belong = c_belong[1:]
+    if c_belong.endswith('|'):
+        c_belong = c_belong[:-1]
+        
+    df_sc.loc[i,'target_company_belong'] = c_belong
+    print(f'已解决{i+1}')
+
+# endregion 中间处理过程_1.2，删掉开头结尾的 | ，就不在中间处理过程_1上的原代码上作修改了
+
+
+df_sc[df_sc['target_company_belong'].isna()]
 df_sc[df_sc['source_company_belong'].isna()]
 print(df_sc['end_'].head())  # 查看前几行数据
 print(df_sc['end_'].apply(type).value_counts())  # 统计元素类型
@@ -378,6 +414,8 @@ df_sc.to_csv(path_dic['middle']+'\\' + '8.新算法_添加所属国家后的供�
 # Save('8.新算法_添加所属国家后的供应链关系表','xlsx',path_dic['middle'] + '\\',df_sc)
 
 #endregion 中间处理过程 
+
+
 
 # region 中间处理过程_2
 #获取供应链表
@@ -429,43 +467,65 @@ print("start_ 缺失值数量:", df_sc['start_'].isna().sum())
 
 
 
-source_cop_set = set()  # 供应链中的source公司集合  ,此处创建空集合  ,集合中只有唯一值，将所有公司储存进去
+
+
+all_cop_set = set()  # 供应链中的source公司集合  ,此处创建空集合  ,集合中只有唯一值，将所有公司储存进去
 
 for i in df_sc.index:
-    source_cop_set.add(df_sc.loc[i,'source_company_id'])
+    all_cop_set.add(df_sc.loc[i,'source_company_id'])
+    all_cop_set.add(df_sc.loc[i,'target_company_id'])
     print(f'已解决{i+1}')
 
+len(all_cop_set)    # 供应链中的公司数量
+
 companies = dict()
-company_set = set()
-for i,cop in enumerate(source_cop_set):
-    company_in_set = cop in company_set
+company_set_record = set()
+for i,cop in enumerate(all_cop_set):
+    company_in_set = cop in company_set_record
     if not company_in_set:
         condition = (df_sc["source_company_id"] == cop)
         subset = df_sc.loc[condition]
+        if subset.empty:
+            # 如果没有找到对应的行，跳过
+            continue
         #此处没有做公司可能退市的处理，如果上市则将其标记为上市公司，记为True
-        is_all_na = subset["SOURCE_ticker"].isna().all() 
-        source_country = set(subset["source_company_belong"].dropna()).pop()
-        companies[cop] = Company(cop,source_country,not is_all_na)
-    print(f'已解决{i+1}/{len(source_cop_set)}')
+        is_all_na = subset["SOURCE_ticker"].isna().all()
+        #国家去重后检测是否应该添加到Companies字典中
+        source_country_set = set(subset["source_company_belong"].dropna())
+        if source_country_set != set():
+            companies[cop] = Company(cop,source_country_set.pop(),not is_all_na)
+            company_set_record.add(cop)
+
+    print(f'已解决{i+1}/{len(all_cop_set)}')
 
 for i in df_sc.index:
     cop = df_sc.loc[i,'target_company_id']
-    company_in_set = cop in company_set
+    company_in_set = cop in company_set_record
     if not company_in_set:
         target_country = df_sc.loc[i,'target_company_belong']
         has_ticker = not pd.isna(df_sc.loc[i, 'TARGET_ticker'])
+        if companies.get(cop, None) == None:
+            # 如果没有找到对应的行，跳过
+            continue
         companies[cop] = Company(cop,target_country,has_ticker)
+        company_set_record.add(cop)
     print(f'已解决{i+1}/{len(df_sc.index)}')
 
-
+len(company_set_record)
+len(companies)
 sample_relations = []
+len_df_sc = len(df_sc.index)
 for i in df_sc.index:
     source_cop =  df_sc.loc[i,'source_company_id']
     target_cop = df_sc.loc[i,'target_company_id']
     start_time = df_sc.loc[i,'start_']
     end_time = df_sc.loc[i,'end_']
+    if companies.get(source_cop,None) == None or companies.get(target_cop,None) == None: ## 如果公司不存在于字典中，则跳过
+        continue
     sample_relations.append((companies[source_cop],companies[target_cop],start_time,end_time))
-    print(f'已解决{i+1}/{len(df_sc.index)}')
+    print(f'已解决{i+1}/{len_df_sc}')
+
+
 
 
 
@@ -479,7 +539,6 @@ for from_co, to_co, start, end in sample_relations:
 
 
 import json
-
 
 ##################################################存储company变量
 # 将公司对象转换为字典列表
