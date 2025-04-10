@@ -286,10 +286,10 @@ class SupplyChainAnalyzer:
 import json
 import plotly.graph_objects as go
 
-with open(path_dic['middle'] + '\\' + 'company.json', 'r') as f:
-    loaded_company_data = json.load(f)
-# with open(r'C:\Users\32915\Desktop\company.json', 'r') as f:
+# with open(path_dic['middle'] + '\\' + 'company.json', 'r') as f:
 #     loaded_company_data = json.load(f)
+with open(r'C:\Users\32915\Desktop\company.json', 'r') as f:
+    loaded_company_data = json.load(f)
 
 #重建company对象
 companies = dict()
@@ -340,11 +340,11 @@ for idx,com_country in enumerate(company_to_country.items()):
     print(f'公司ID：国家 "{com_country}')
 
 # # 读取数据（需要替换为实际路径）
-# with open(r'C:\Users\32915\Desktop\complete_supply_chains.json', 'r', encoding='utf-8') as f:
-#     loaded_data = json.load(f)
-
-with open(path_dic['middle'] + '\\' + 'complete_supply_chains.json', 'r', encoding='utf-8') as f:
+with open(r'C:\Users\32915\Desktop\complete_supply_chains.json', 'r', encoding='utf-8') as f:
     loaded_data = json.load(f)
+
+# with open(path_dic['middle'] + '\\' + 'complete_supply_chains.json', 'r', encoding='utf-8') as f:
+#     loaded_data = json.load(f)
 
 def parse_date(date_str):
     """解析日期字符串为datetime对象，时间强制为00:00:00，空值返回None"""
@@ -448,21 +448,29 @@ def generate_path_lines(relations, filter_start, filter_end):
 path_lines_all = generate_path_lines(relations=relations,
                                        filter_start=datetime(2016,11,9),
                                        filter_end=datetime(2024,12,31))
+path_lines = path_lines_all
+## 涉及国家对数：permanent_break,transfer，recover = 68,56,20
+
 # path_lines_Trump = generate_path_lines(relations=relations,
 #                                        filter_start=datetime(2016,11,9),
 #                                        filter_end=datetime(2020,12,14))
+# path_lines = path_lines_Trump
+## 涉及国家对数：permanent_break,transfer，recover = 57,36,7
+
 # path_lines_Biden = generate_path_lines(relations=relations,
 #                                        filter_start=datetime(2020,12,14),
 #                                        filter_end=datetime(2024,12,31))
+# path_lines = path_lines_Biden
+# 涉及国家对数：permanent_break,transfer，recover = 59,53,19
+
 
 # len(path_lines_Trump)
 
 # for rel in path_lines_Trump[:1000]:
 #     print(rel)
 
-path_lines = path_lines_all
-# path_lines = path_lines_Trump
-# path_lines = path_lines_Biden
+
+
 
 for rel in path_lines[3000:4000]:
     print(rel)
