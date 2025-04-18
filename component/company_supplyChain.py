@@ -154,7 +154,7 @@ class SupplyChainAnalyzer:
             if len(path) >= min_length:
                 country_check = False
                 for rel in path:
-                    contains_cn = (rel.from_co.country == 'CN') or (rel.to_co.country == 'CN')
+                    contains_cn = ('CN' in rel.from_co.country ) or ('CN' in rel.to_co.country )
                     if  contains_cn:
                         country_check = True
                 if country_check:
