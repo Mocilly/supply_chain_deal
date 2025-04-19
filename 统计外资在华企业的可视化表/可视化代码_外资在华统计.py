@@ -207,18 +207,76 @@ relations = rebuild_relations(loaded_data=loaded_data)
 
 for rel in relations[:10]:
     print(rel)
+    rel[:-1]
+    for r in rel[:-1]:
+        print(f"起始公司：{r.from_co.id}，目标公司：{r.to_co.id}，开始时间：{r.start}，结束时间：{r.end}，状态：{r.status}")
     
 
 len(relations)
 
 
-def delete_relation(relations:List[SupplyRelation],relation:SupplyRelation)->List[SupplyRelation]:
-    """删除指定的供应链关系"""
+
+
+def is_relation_valid(relation: SupplyRelation) -> bool:
+    """关系有效性验证函数（新增）"""
+    def validate_company(company: Company) -> bool:
+        """验证单个公司是否符合要求"""
+        home_regions, countries = company_to_country.get(company.id, ([], []))
+        
+        # 条件1：home_region必须包含CN（不区分大小写）
+        home_valid = 'CN' in home_regions
+        
+        # 条件2：countries不能全为CN
+        country_valid =  'CN' not in countries or set(countries) != {'CN'}
+        
+        return home_valid and country_valid
+
+    # 双向验证：起始公司或目标公司任意一方符合条件即可
+    return validate_company(relation.from_co) or validate_company(relation.to_co)
+
+def delete_relation(relations: List[List]) -> List[List]:
+    """
+    增强版供应链关系过滤方法
+    逻辑说明：
+    1. 遍历每个供应链链条
+    2. 对每个链条中的每个supplyrelation进行双向验证：
+       - 验证方向：from_co和to_co公司
+       - 必须满足：home_region包含CN 且 country不全为CN
+    3. 保留条件：链条中存在至少一个有效关系
+    4. 删除条件：整条链所有关系均无效
+    """
+    filtered_chains = []
+    
     for chain in relations:
-        if relation in chain:
-            chain.remove(relation)
-            break
-    return relations
+        # 分离关系对象和其他元数据
+        relations_in_chain = chain[:-1]
+        metadata = chain[-1]
+        
+        # 有效性验证（至少有一个有效关系）
+        keep_chain = any([is_relation_valid(rel) for rel in relations_in_chain])
+        
+        if keep_chain:
+            # 重构链条时保留原始结构
+            filtered_chains.append(chain)
+
+    
+    return filtered_chains
+
+
+
+437641
+
+
+# 执行过滤
+filtered_rel = delete_relation(relations)
+print(f"过滤后剩余链条数：{len(filtered_rel)}")
+
+for idx, rel in enumerate(filtered_rel[:10]):
+    print(f"链条{idx+1}:")
+    print(rel)
+
+
+
 
 
 def generate_path_lines(relations, filter_start, filter_end):
@@ -262,7 +320,7 @@ def generate_path_lines(relations, filter_start, filter_end):
 
 
 #region ----------------------------------------两任期数据切换 （重要）----------------------
-path_lines_all = generate_path_lines(relations=relations,
+path_lines_all = generate_path_lines(relations=filtered_rel,
                                        filter_start=datetime(2016,11,9),
                                        filter_end=datetime(2024,12,31))
 path_lines = path_lines_all
@@ -334,7 +392,9 @@ country_coords = {
     "FR": [2.3522, 48.8566],      # 法国
     "GB": [-0.1276, 51.5072],     # 英国
     "GE": [44.8271, 41.7151],     # 格鲁吉亚
-    "GH": [-0.1866, 5.6037],      # 加纳
+    "GH": [-0.1866, 5.6037], 
+    
+         # 加纳
     "GR": [23.7275, 37.9838],     # 希腊
     "GT": [-90.5150, 14.6349],    # 危地马拉
     "HN": [-87.2044, 14.0818],    # 洪都拉斯
@@ -488,7 +548,7 @@ country_coords = {
 #endregion国家地理坐标（经度，纬度）
 
 # region ###################################################### 统计逻辑实现  （更改统计规则从此处入手，或者从数据加载层面入手）
-def analyze_paths(path_lines,target_country:str='CN',foreign_country:str='US'):
+def analyze_paths(path_lines,):
     
     status_records = {
         'permanent_break': defaultdict(float),
@@ -514,8 +574,8 @@ def analyze_paths(path_lines,target_country:str='CN',foreign_country:str='US'):
         # 状态处理逻辑
         current_chain = None
         for idx, (start_comp, end_comp, status) in enumerate(segments):
-            start_country = company_to_country.get(start_comp)
-            end_country = company_to_country.get(end_comp)
+            start_country = company_to_country.get(start_comp)[1]
+            end_country = company_to_country.get(end_comp)[1]
             
             # 必须存在国家映射 会检查两个变量是否均为“真值”（即非空、非None、非False等）
             if not all([start_country, end_country]):
@@ -523,34 +583,33 @@ def analyze_paths(path_lines,target_country:str='CN',foreign_country:str='US'):
                 
             if status == 'permanent_break':
                 # 处理CN起始的段，强制创建新层级
-                if target_country in start_country and len (start_country) == 1:
-                    layer = 1
-                    current_chain = {'layer': layer, 'origin': target_country}
-                elif current_chain and current_chain['origin'] == target_country:
-                    # 非CN段，仅在现有链条中递增层级
+                
+                layer = 1
+                current_chain = {'layer': layer}
+                if current_chain:
+                    
                     layer = current_chain['layer'] + 1
                     current_chain['layer'] = layer
-                else:
-                    continue  # 忽略非CN且无链条的段
                 
                 # 计算权重
-                if target_country in start_country:
-                    is_limit_break = (
-                        final_status == 'limit_day_break' and 
-                        (idx == len(segments)-1 and segments[-1][2] != 'permanent_break')
-                    )
-                    layer_weights = {1: 1.0, 2: 0.7, 3: 0.4} if is_limit_break else {1: 1.0, 2: 0.5, 3: 0.1}
-                    weight = layer_weights.get(layer, 0) * (0.1 if is_limit_break else 1)
-                    
+
+                is_limit_break = (
+                    final_status == 'limit_day_break' and 
+                    (idx == len(segments)-1 and segments[-1][2] != 'permanent_break')
+                )
+                layer_weights = {1: 1.0, 2: 0.7, 3: 0.4} if is_limit_break else {1: 1.0, 2: 0.5, 3: 0.1}
+                weight = layer_weights.get(layer, 0) * (0.1 if is_limit_break else 1)
+                
+                for start in start_country:
                     for target in end_country:
-                        key = (target_country, target)
+                        key = (start, target)
                         status_records['permanent_break'][key] += weight
-            
+                
             # 处理其他状态
             elif status in ('transfer', 'recovered'):
-                if target_country in start_country:
+                for start in start_country:
                     for target in end_country:
-                        status_records[status][(target_country, target)] += 1.0
+                        status_records[status][(start, target)] += 1.0
                 current_chain = None
 
     return status_records
@@ -571,7 +630,7 @@ for status in ['permanent_break', 'transfer', 'recovered']:
 
 # region创建地图图形
 
-def create_map_figure(status_data,country:str, line_width_list=[]):
+def create_map_figure(status_data,country:str, line_width_list=[],country_show_list:list=['CN','HK','TW','MO']):
     traces = []
     color_mapping = {
         'permanent_break': 'rgb(230,50,50)',  # 红色
@@ -616,6 +675,10 @@ def create_map_figure(status_data,country:str, line_width_list=[]):
         print(f"\n处理{status}，最大权重：{max_weight}")
         sum_weights = sum([weight for (start, end), weight in data.items()])
         for i, ((start, end), weight) in enumerate(data.items()):
+             # 新增：国家过滤测试
+            if start not in country_show_list and end not in country_show_list:  # 检测元组是否包含中心国家
+                print(f"过滤非中心国家节点：{start}→{end}")
+                continue
             # 调试：打印前5条记录
             if i < 5:
                 print(f'总权重为：{sum_weights}')
@@ -675,25 +738,6 @@ def create_map_figure(status_data,country:str, line_width_list=[]):
             scale=1.5,  # 放大初始显示比例
         )
     )
-
-    #     # 修改地理参数配置
-    # geo_config = dict(
-    #     resolution=110,
-    #     showcountries=True,
-    #     countrycolor='rgb(150,150,150)',
-    #     countrywidth=0.5,
-    #     showframe=False,
-    #     # projection_type="orthographic",  # 改用正交投影
-    #     projection_type="natural earth",  # 改用自然地球投影
-    #     projection=dict(
-    #         scale=1.5,  # 放大初始显示比例
-    #         rotation=dict(lon=104, lat=35, roll=0)  # 中心点对准中国
-    #     ),
-    #     bgcolor='rgba(255,255,255,0.2)',  # 可选：背景透明化
-    #     landcolor='rgb(240,240,240)',      # 陆地颜色
-    #     lataxis_showgrid=True,             # 显示经纬网格
-    #     lonaxis_showgrid=True
-    # )
     
     fig = go.Figure(data=traces)
     fig.update_layout(
@@ -733,7 +777,7 @@ def get_layer(w):
 
 
 # 生成可视化图表
-fig = create_map_figure(status_data,'CN_2', line_width_list=[1,6,10,15])
+fig = create_map_figure(status_data,'CN_2', line_width_list=[1,6,10,15],country_show_center=['CN','HK','TW','MO'])
 
 
 fig.show()
