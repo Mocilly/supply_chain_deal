@@ -346,7 +346,7 @@ path_lines = path_lines_all
 
 
 
-
+len(path_lines)
 for rel in path_lines[3000:4000]:
     print(rel)
 
@@ -616,15 +616,15 @@ def analyze_paths(path_lines,):
 
 status_data = analyze_paths(path_lines)
 
+print("\n原始状态数据样本：")
 # 调试：打印前5条记录
 for key,value in status_data.items():
     print(key,value)
 
 
 
-print("\n原始状态数据样本：")
-for status in ['permanent_break', 'transfer', 'recovered']:
-    print(f"{status}: {list(status_data[status].items())[:3]}")
+
+
 # endregion
 
 
@@ -675,8 +675,12 @@ def create_map_figure(status_data,country:str, line_width_list=[],country_show_l
         print(f"\n处理{status}，最大权重：{max_weight}")
         sum_weights = sum([weight for (start, end), weight in data.items()])
         for i, ((start, end), weight) in enumerate(data.items()):
+            # 国家节点过滤（添加调试）
+            if start not in valid_countries or end not in valid_countries:
+                print(f"过滤无效节点：{start}→{end}")
+                continue
              # 新增：国家过滤测试
-            if start not in country_show_list and end not in country_show_list:  # 检测元组是否包含中心国家
+            if (start not in country_show_list) and (end not in country_show_list):  # 检测元组是否包含中心国家
                 print(f"过滤非中心国家节点：{start}→{end}")
                 continue
             # 调试：打印前5条记录
@@ -685,14 +689,11 @@ def create_map_figure(status_data,country:str, line_width_list=[],country_show_l
                 print(f"  {start}→{end} 权重：{weight}")
                 print(f'分位数为：{weight/sum_weights*100}')
 
-            # 国家节点过滤（添加调试）
-            if start not in valid_countries or end not in valid_countries:
-                print(f"过滤无效节点：{start}→{end}")
-                continue
+
             
             # 处理CN→CN的情况，使用CN_2作为终点坐标
             original_end = end
-            if start == 'CN' and end == 'CN' and 'CN_2' in valid_countries:
+            if start == 'CN' and end == 'CN' and country in valid_countries:
                 end = country  # 替换为CN_2
                 # 确保替换后的国家有效
                 if end not in valid_countries:
@@ -777,7 +778,7 @@ def get_layer(w):
 
 
 # 生成可视化图表
-fig = create_map_figure(status_data,'CN_2', line_width_list=[1,6,10,15],country_show_center=['CN','HK','TW','MO'])
+fig = create_map_figure(status_data,'CN_2', line_width_list=[1,6,10,15],country_show_list=['CN','HK','MO'])
 
 
 fig.show()
