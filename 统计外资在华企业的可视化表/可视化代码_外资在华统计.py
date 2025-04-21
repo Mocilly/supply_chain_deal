@@ -217,6 +217,8 @@ len(relations)
 
 
 
+
+
 def is_relation_valid(relation: SupplyRelation) -> bool:
     """关系有效性验证函数（新增）"""
     def validate_company(company: Company) -> bool:
@@ -276,7 +278,28 @@ for idx, rel in enumerate(filtered_rel[:10]):
     print(rel)
 
 
+def count_chains_with_node(relations, node_code):
+    """
+    统计链条中带有指定节点的供应链数量
+    :param relations: 供应链关系列表
+    :param node_code: 指定节点代码（如'HK', 'CN'等）
+    :return: 带有指定节点的供应链数量
+    """
+    count = 0
+    for rel in relations:
+        for r in rel[:-1]:
+            source_country = company_to_country.get(r.from_co.id, [])
+            target_country = company_to_country.get(r.to_co.id, [])
+            if (node_code in source_country[1] or node_code in target_country[1]):
+                count += 1
+                break
+    return count
 
+# 示例调用
+node_code = 'CN'
+node_code = 'HK'
+count = count_chains_with_node(filtered_rel, node_code)
+print(f"链条中带有节点 {node_code} 的供应链数量：{count}")
 
 
 def generate_path_lines(relations, filter_start, filter_end):
@@ -618,6 +641,26 @@ status_data = analyze_paths(path_lines)
 
 print("\n原始状态数据样本：")
 # 调试：打印前5条记录
+
+#比较位置不同的元组是否相等
+country_set = set()
+
+for i, (key, value) in enumerate(status_data['permanent_break'].items()):
+    country_set.add(key)
+country_set
+need_count = 0
+for country_pair in country_set:
+    if 'CN' in country_pair and set(country_pair) != {'CN'}:
+        need_count += 1
+print('中国内陆 涉及地区对数：',need_count)
+
+
+need_count = 0
+for country_pair in country_set:
+    if 'HK' in country_pair and set(country_pair) != {'HK'}:
+        need_count += 1
+print('中国香港 涉及地区对数：',need_count)
+
 for key,value in status_data.items():
     print(key,value)
 

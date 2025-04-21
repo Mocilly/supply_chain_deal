@@ -52,8 +52,8 @@ def pdf_to_image(pdf_path, output_path, zoom=6):
 
 # 使用示例
 
-source_folder = r"C:\Users\32915\Desktop\特朗普与拜登任期内中国内外供应链重构动向的比较分析\供应链情况切割图\pdf"
-output_folder = r'C:\Users\32915\Desktop\特朗普与拜登任期内中国内外供应链重构动向的比较分析\供应链情况切割图\png'
+source_folder = r"C:\Users\Mocilly\Desktop\外资在华企业供应链\裁剪PDF"
+output_folder = r'C:\Users\Mocilly\Desktop\外资在华企业供应链\高清PNG'
 source_files = get_all_files(source_folder)
 source_files
 for file_name, file_path in source_files:
