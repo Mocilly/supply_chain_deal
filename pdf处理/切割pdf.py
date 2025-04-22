@@ -30,7 +30,7 @@ def split_pdf(input_path, output_path, page_range):
 base_path = r"C:\Users\32915\Desktop\马原方法论"  # 此处必须是有效的实际路径
 input_file = "马克思主义与社会科学方法论 2018修订版 马克思主义理论研究和建设工程重点教材本书编写组 高等教育出版社 2018_14717665.pdf"
 output_file = "切割.pdf"
- 
+
 split_pdf(
     input_path=os.path.join(base_path, input_file),
     output_path=os.path.join(base_path,output_file),
