@@ -1,219 +1,56 @@
 # region ######################################################  开始必备执行代码   
-import os
-import re
-
-import numpy as np
-import pandas as pd
-from datetime import datetime
-from typing import List, Dict
 from collections import defaultdict
-from component.company_supplyChain import SupplyRelation, Company, SupplyChainAnalyzer
-
-
-# pd.options.display.max_rows = 10000  # 终端显示10000行
-
-
-def Save(fileName,file_type,path,df):
-    if file_type == 'xlsx':
-        #.将上面的df保存为xlsx表格
-        fileName = fileName +'.xlsx'
-        savePath = ''.join([path,fileName])
-        wr = pd.ExcelWriter(savePath)#输入即将导出数据所在的路径并指定好Excel工作簿的名称
-        df.to_excel(wr, index = False)
-
-        wr._save()
-    if file_type == 'dta':
-        fileName = fileName +'.dta'
-        savePath = ''.join([path,fileName])
-        df.to_stata(savePath,
-                        write_index=False,
-                        version=118)
-
-
-# 路径集合#
-path_dic ={'company':r'.\调用文件\统计在华外资企业的可视化表\处理后的json文件\company.json',
-           'supply_chain': r'.\调用文件\统计在华外资企业的可视化表\处理后的json文件\supply_relations.json',
-           'complete_sc':r'.\调用文件\统计在华外资企业的可视化表\处理后的json文件\complete_supply_chains.json',
-
-           }
-
-#endregion 
-
-
-# region数据结构片段解释：
-
-'''
-	{
-  "S1": [
-    {
-      "path": [
-        {
-          "name": "C4", 
-          "status": "permanent_break",
-          "start": "2023-01-01",
-          "end": "2023-12-31"
-        },
-        {
-          "name": "C5",
-          "status": None,
-          "start": None,
-          "end": None
-        },
-        {
-          "name": "C6",
-          "status": "transfer",
-          "start": "2024-01-01",
-          "end": "2024-12-31"
-        }
-      ],
-      "final_status": "limit_day_break",
-      "start_time": "2023-01-01",
-      "end_time": "2025-01-01"
-    }
-  ]
-}
-
-'''
-
-#endregion数据结构片段解释
-
-# region 数据读取与加载
-import json
+import re
+from typing import List
+from component.cop_relation_rebuild_module import (
+    save_file,
+    split_countries,
+    parse_date,
+    rebuild_relations,
+    load_companies,
+    load_supply_chain_data,
+    build_company_to_country,
+    path_dic)
+from component.company_supplyChain import SupplyRelation, Company
+from datetime import datetime
 import plotly.graph_objects as go
 
+# 路径集合#
+path_dic = {'company': r'.\调用文件\统计在华外资企业的可视化表\处理后的json文件\company.json',
+            'supply_chain': r'.\调用文件\统计在华外资企业的可视化表\处理后的json文件\supply_relations.json',
+            'complete_sc': r'.\调用文件\统计在华外资企业的可视化表\处理后的json文件\complete_supply_chains.json'}
 
-with open(path_dic["company"], 'r') as f:
-    loaded_company_data = json.load(f)
+# 加载公司数据
+companies = load_companies(path_dic["company"])
 
-#重建company对象
-companies = dict()
-count = 0
-for cop in loaded_company_data:
-    companies[cop['id']] = Company(cop['id'],cop['country'],cop['listed'])
-    # print(f'已解决{count+1}')
-    count+=1
-
-for idx,company in enumerate(companies.values()):
-    if idx>= 100:
+# 打印前100个公司信息
+for idx, company in enumerate(companies.values()):
+    if idx >= 100:
         break
     print(f'公司ID：{company.id}，国家：{company.country}，上市公司：{company.listed}')
 
+# 构建公司到国家的映射表
+company_to_country = build_company_to_country(companies)
 
-# 公司-国家映射表（用于后续路径分析）
-      #新增多国家背景公司计量，将多国家背景公司的所属国家处理为列表
-
-# 用于处理多国家背景公司的国家字符串
-def split_countries(country_str: str) -> tuple:
-    """智能分割国家字符串，自动检测分隔符"""
-    
-
-    # 标准化字符串（去除前后空格）
-    normalized = country_str.strip()
-
-    # 空字符串直接返回空元组
-    if not normalized:
-        return ()
-    # 标准化字符串（去除前后空格）
-    # 检测分隔符
-    home_region = normalized[:normalized.find('&')]
-    hr_c = home_region[home_region.find(':')+1:]
-    c = normalized[normalized.find('&')+1:]
-    country = c[c.find(':')+1:]
-    home_region_list = None
-    country_list = None
-    if '|' in hr_c:
-        # 分割并清理元素
-        home_region_list = [hr for hr in hr_c.split('|')]
-
-    else:
-        # 返回单个国家列表
-        home_region_list = [hr_c]
-    
-    if '|' in country:
-        # 分割并清理元素
-        country_list = [c for c in country.split('|')]
-    else:
-        # 返回单个国家列表
-        country_list = [country]
-
-    return (home_region_list,country_list)
-
-company_to_country = dict()
-for company,info in companies.items():
-    company_to_country[company] = split_countries(info.country)
-    
-
-for idx,com_country in enumerate(company_to_country.items()):
-    if idx>= 100:
+# 打印前100个公司-国家映射
+for idx, com_country in enumerate(company_to_country.items()):
+    if idx >= 100:
         break
     print(f'公司ID：国家 "{com_country}')
 
-# # 读取数据（需要替换为实际路径）
-with open(path_dic["complete_sc"], 'r', encoding='utf-8') as f:
-    loaded_data = json.load(f)
+# 加载供应链数据
+loaded_data = load_supply_chain_data(path_dic["complete_sc"])
 
+# 重建供应链关系
+relations = rebuild_relations(loaded_data, companies)
 
-def parse_date(date_str):
-    """解析日期字符串为datetime对象，时间强制为00:00:00，空值返回None"""
-    if not date_str:
-        return None
-    try:
-        # 直接解析为datetime，时间部分自动为0
-        return datetime.fromisoformat(date_str)
-    except ValueError:
-        return None
-
-
-
-def rebuild_relations(loaded_data:dict)->List[SupplyRelation]:
-
-    """重建供应链关系对象"""
-    relations = []
-    for initial_node, chains in loaded_data.items():
-        #  遍历该初始节点下的所有链条
-        for chain in chains:
-            nodes = chain.get('path', [])
-            final_status = chain.get('final_status', '')
-            start_time = parse_date(chain.get('start_time', None))
-            end_time = parse_date(chain.get('end_time', None))
-            rel = []
-  
-            #  生成初始节点到第一个节点的边（核心逻辑）
-            if nodes:
-                first_node = nodes[0]
-                # 构建初始关系
-                sr =SupplyRelation(companies[initial_node],
-                                   companies[first_node['name']],
-                                   parse_date(first_node['start']), 
-                                   parse_date(first_node['end']),
-                                   )
-                sr.status = first_node['status']
-                rel.append(sr)
-                 # 生成后续节点间的供应关系
-                for i in range(1,len(nodes)-1,2):
-                    from_co = companies[nodes[i]['name']]
-                    to_co = companies[nodes[i+1]['name']]
-                    start = parse_date(nodes[i+1]['start'])
-                    end = parse_date(nodes[i+1]['end'])
-                    status = nodes[i+1].get('status')
-                    supply_sc = SupplyRelation(from_co, to_co, start, end)
-                    supply_sc.status = status
-                    rel.append(supply_sc)
-                rel.append([final_status,start_time,end_time])
-                relations.append(rel)
-    return relations
-
-relations = rebuild_relations(loaded_data=loaded_data)
-
+# 打印前10个供应链关系
 for rel in relations[:10]:
     print(rel)
-    rel[:-1]
     for r in rel[:-1]:
         print(f"起始公司：{r.from_co.id}，目标公司：{r.to_co.id}，开始时间：{r.start}，结束时间：{r.end}，状态：{r.status}")
-    
 
-len(relations)
-
+print(f"供应链关系总数：{len(relations)}")
 
 
 

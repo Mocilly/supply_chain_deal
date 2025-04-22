@@ -27,12 +27,12 @@ def split_pdf(input_path, output_path, page_range):
     new_doc.close()
 
 	# 使用原始字符串+os.path处理路径（推荐）
-base_path = r"C:\Users\32915\Desktop"  # 此处必须是有效的实际路径
-input_file = "论《共产党宣言》中人的解放思想_王召群 (1).pdf"
+base_path = r"C:\Users\32915\Desktop\马原方法论"  # 此处必须是有效的实际路径
+input_file = "马克思主义与社会科学方法论 2018修订版 马克思主义理论研究和建设工程重点教材本书编写组 高等教育出版社 2018_14717665.pdf"
 output_file = "切割.pdf"
  
 split_pdf(
     input_path=os.path.join(base_path, input_file),
     output_path=os.path.join(base_path,output_file),
-    page_range=range(51,55)  # 输出原文件第48-55页（PyPDF2索引从0开始）
+    page_range=range(5+11,9+1+11)  # 输出原文件第48-55页（PyPDF2索引从0开始）
 )
