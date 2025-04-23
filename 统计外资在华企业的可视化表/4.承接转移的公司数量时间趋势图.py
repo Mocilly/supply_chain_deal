@@ -138,155 +138,219 @@ len(pattern_paths)
 
 
 
-# 建立转移的时间月份字典，从2013年1月份到2024年12月份每个月份创建一个年份+月份的键
-transfer_month_count = dict()
-start_date = datetime(2013, 1, 1)
-end_date = datetime(2024, 12, 31)
-current_date = start_date
- 
-while current_date <= end_date:
-    # 直接使用 datetime 对象作为键（精确到月初）
-    key = current_date.replace(day=1)
-    transfer_month_count[key] = 0
-    # 使用 dateutil 的 relativedelta 安全增加1个月
-    current_date += relativedelta(months=1)
+def create_time_keyed_dict(start_date: datetime, end_date: datetime, increment: str = 'year') -> dict:
+    """
+    创建一个以时间为键的字典，键为指定时间间隔的datetime对象，值初始化为0。
+
+    :param start_date: 起始日期，datetime对象
+    :param end_date: 结束日期，datetime对象
+    :param increment: 时间间隔类型，'year'表示按年递增，'month'表示按月递增
+    :return: 初始化的字典
+    """
+    time_keyed_dict = dict()
+    current_date = start_date
+
+    while current_date <= end_date:
+        time_keyed_dict[current_date] = 0
+        if increment == 'year':
+            current_date += relativedelta(years=1)
+        elif increment == 'month':
+            current_date += relativedelta(months=1)
+        else:
+            raise ValueError("Unsupported increment type. Use 'year' or 'month'.")
+    
+    return time_keyed_dict
+
+
+
 
 # 计数函数
-def increment_transfer_month_count(event_time: datetime,transfer_dict:dict) -> None:
-    month_key = event_time.replace(day=1)
-    transfer_dict[month_key] += 1
+def increment_transfer_count(event_time: datetime, transfer_dict: dict, increment: str = 'year') -> None:
+    """
+    根据时间点和指定的时间间隔类型（年或月），对对应的计数字典进行计数+1。
 
-
-
-
-
-# 建立转移的时间年度字典，从2013年到2024年每年创建一个年份键（每年1月1日）
-transfer_year_count = dict()
-start_date = datetime(2013, 1, 1)
-end_date = datetime(2024, 12, 31)
-current_date = start_date
- 
-# 初始化字典，键为每年1月1日的datetime对象
-while current_date <= end_date:
-    transfer_year_count[current_date] = 0  # 直接以每年1月1日作为键
-    current_date += relativedelta(years=1)  # 安全递增年份
- 
-# 计数函数
-def increment_transfer_year_count(event_time: datetime) -> None:
-    """当出现符合时间点时，对应年份的计数+1"""
-    # 生成年度键（每年1月1日）
-    year_key = datetime(event_time.year, 1, 1)
-    # 检查键是否存在（防止意外输入）
-    if year_key in transfer_year_count:
-        transfer_year_count[year_key] += 1
+    :param event_time: 事件发生时间，datetime对象
+    :param transfer_dict: 计数字典
+    :param increment: 时间间隔类型，'year'表示按年计数，'month'表示按月计数
+    """
+    if increment == 'year':
+        key = datetime(event_time.year, 1, 1)
+    elif increment == 'month':
+        key = event_time.replace(day=1)
     else:
-        print(f"警告：时间 {event_time} 超出统计范围（2013-2024）")
+        raise ValueError("Unsupported increment type. Use 'year' or 'month'.")
+
+    if key in transfer_dict:
+        transfer_dict[key] += 1
+    else:
+        print(f"警告：时间 {event_time} 超出统计范围或键不存在")
+
+# 创建一个以月份为键的字典，键为指定时间间隔的datetime对象（精确到月初），值初始化为0
+transfer_count_by_month = create_time_keyed_dict(
+    start_date=datetime(2013, 1, 1),
+    end_date=datetime(2024, 12, 31),
+    increment='month'
+    )
 
 
 
 
+
+
+
+# country一栏里都是数目为1的列表，所以相当于 ==
+cn_transfer_rel_by_year = create_time_keyed_dict(
+    start_date=datetime(2013, 1, 1),
+    end_date=datetime(2024, 12, 31),
+    increment='year'
+    )
 for i, rel in enumerate(pattern_paths):
-    #中国本土公司间建立转移供应链关系 时间计数
+    #home_region一栏里存在长度不为1的列表，由于可视化是用home_region + country，所以这里要用home_region+country从transfer中找到转向中国的供应链关系
     cn_mainland__SAR = ['CN','HK','MO']
-    if (any(area in company_to_country[rel.from_co.id][1] for area in cn_mainland__SAR) or
+    if (any(area in company_to_country[rel.to_co.id][0] for area in cn_mainland__SAR) or
         any(area in company_to_country[rel.to_co.id][1] for area in cn_mainland__SAR)
         ):
         if 'Nation_Not_Found' in company_to_country[rel.from_co.id][0] or 'Nation_Not_Found' in company_to_country[rel.from_co.id][1]:
             continue
         else:    
-            increment_transfer_year_count(rel.start)
+            increment_transfer_count(rel.start,cn_transfer_rel_by_year,increment='year')
 
-
-for time, value in transfer_year_count.items():
+for time, value in cn_transfer_rel_by_year.items():
     print(f"年份：{time.year}, 转移数量：{value}")
 
 
 
-#region---------------年度时间趋势图可视化
-import matplotlib.pyplot as plt
-import matplotlib.dates as mdates
-from matplotlib.ticker import PercentFormatter
-import numpy as np
-from datetime import datetime
+    # 使用方法创建年度字典
+native_transfer_count_by_year = create_time_keyed_dict(
+    start_date=datetime(2013, 1, 1),
+    end_date=datetime(2024, 12, 31),
+    increment='year'
+    )
+for i, rel in enumerate(pattern_paths):
+    #中国本土公司间建立转移供应链关系 时间计数
+    cn_mainland__SAR = ['CN','HK','MO']
+    #下面为cn公司数量计数
+    # if (any(area in company_to_country[rel.from_co.id][1] for area in cn_mainland__SAR) or
+    #     any(area in company_to_country[rel.to_co.id][1] for area in cn_mainland__SAR)
+    #     ):
+    if (any(area in company_to_country[rel.from_co.id][1] for area in cn_mainland__SAR) and
+        any(area in company_to_country[rel.to_co.id][1] for area in cn_mainland__SAR)
+        ):
+        if 'Nation_Not_Found' in company_to_country[rel.from_co.id][0] or 'Nation_Not_Found' in company_to_country[rel.from_co.id][1]:
+            continue
+        else:    
+            increment_transfer_count(rel.start,native_transfer_count_by_year,increment='year')
 
-# 设置中文字体和行业报告风格
-plt.rcParams['font.sans-serif'] = ['SimHei']  # 适用于Windows系统
-plt.rcParams['axes.unicode_minus'] = False·
-plt.style.use('ggplot')
 
-# 准备数据（示例数据，需替换实际数据）
-years = sorted(transfer_year_count.keys())
-values = [transfer_year_count[year] for year in years]
+for time, value in native_transfer_count_by_year.items():
+    print(f"年份：{time.year}, 转移数量：{value}")
 
-# 计算增长率
-growth_rates = [(values[i] - values[i-1])/values[i-1] if i>0 else 0 for i in range(len(values))]
-growth_rates[0] = np.nan  # 首年无增长率
+def plot_supply_chain_trend(values, values_2, bars_label, line_label, x_label, y_label_left, y_label_right, title):
+    """
+    绘制供应链转移趋势分析图。
 
-# 创建画布和坐标轴
-fig, ax1 = plt.subplots(figsize=(12, 6))
-ax2 = ax1.twinx()
+    :param values: 柱状图数据
+    :param values_2: 折线图数据
+    :param bars_label: 柱状图图例标签
+    :param line_label: 折线图图例标签
+    :param x_label: 横轴标签
+    :param y_label_left: 左侧纵轴标签
+    :param y_label_right: 右侧纵轴标签
+    :param title: 图表标题
+    """
+    import matplotlib.pyplot as plt
+    import numpy as np
 
-# 绘制柱状图（左侧轴）
-bars = ax1.bar(
-    [y.strftime('%Y') for y in years],
-    values,
-    color='#1F77B4',
-    edgecolor='black',
-    alpha=0.8,
-    hatch='////',
-    label='转移数量'
+    # 设置中文字体和行业报告风格
+    plt.rcParams['font.sans-serif'] = ['SimHei']  # 适用于Windows系统
+    plt.rcParams['axes.unicode_minus'] = False
+    plt.style.use('ggplot')
+
+    # 准备年份数据
+    years = sorted(values.keys())
+    bar_values = [values[year] for year in years]
+    line_values = [values_2[year] for year in years]
+
+    # 创建画布和坐标轴
+    fig, ax1 = plt.subplots(figsize=(12, 6))
+    ax2 = ax1.twinx()
+
+    # 绘制柱状图（左侧轴）
+    bars = ax1.bar(
+        [y.strftime('%Y') for y in years],
+        bar_values,
+        color='#1F77B4',
+        edgecolor='black',
+        alpha=0.8,
+        hatch='////',
+        label=bars_label
+    )
+    # 添加柱状图阴影效果
+    for bar in bars:
+        bar.set_alpha(0.8)
+        bar.set_edgecolor('black')
+
+    # 绘制折线图（右侧轴）
+    line, = ax2.plot(
+        [y.strftime('%Y') for y in years],
+        line_values,
+        color='#2CA02C',
+        linestyle='--',
+        marker='o',
+        markersize=8,
+        linewidth=2,
+        markerfacecolor='white',
+        markeredgewidth=2,
+        label=line_label
+    )
+
+    # 设置坐标轴格式
+    ax1.set_xlabel(x_label, fontsize=12)
+    ax1.set_ylabel(y_label_left, fontsize=12)
+    ax2.set_ylabel(y_label_right, fontsize=12)
+
+    # 设置双轴刻度范围
+    ax1.set_ylim(0, max(bar_values) * 1.5)
+    ax2.set_ylim(
+        min(line_values) * 1.1 if not np.isnan(min(line_values)) else 0,
+        max(line_values) * 1.1 if not np.isnan(max(line_values)) else 1
+    )
+
+    # 设置图表标题
+    plt.title(title, fontsize=14, pad=20)
+    lines_for_legend = [
+        plt.Rectangle((0,0), 1, 1, fc='#1F77B4', alpha=0.8, hatch='////', edgecolor='black'),  # 柱状图代理句柄
+        line  # 折线图句柄
+    ]
+    labels_for_legend = [bars_label, line_label]
+ 
+    ax1.legend(lines_for_legend, labels_for_legend, loc='upper left', frameon=True)
+
+    # 添加数据标签
+    for bar in bars:
+        height = bar.get_height()
+        ax1.text(bar.get_x() + bar.get_width() / 2., height,
+                    f'{int(height)}',
+                    ha='center', va='bottom')
+
+    # 设置网格线
+    ax1.grid(axis='y', linestyle='--', alpha=0.7)
+    ax2.grid(visible=False)
+
+    # 调整布局
+    plt.tight_layout()
+    plt.show()
+
+plot_supply_chain_trend(
+    values=cn_transfer_rel_by_year,
+    values_2=native_transfer_count_by_year,
+    bars_label="转向中国的供应链数量",
+    line_label="中国本土供应链数量",
+    x_label="年份",
+    y_label_left="转向中国的供应链数量",
+    y_label_right="中国本土供应链数量",
+    title="供应链转移趋势分析"
 )
-# 添加柱状图阴影效果
-for bar in bars:
-    bar.set_alpha(0.8)
-    bar.set_edgecolor('black')
 
-# 绘制折线图（右侧轴）
-line, = ax2.plot(
-    [y.strftime('%Y') for y in years],
-    growth_rates,
-    color='#2CA02C',
-    linestyle='--',
-    marker='o',
-    markersize=8,
-    linewidth=2,
-    markerfacecolor='white',
-    markeredgewidth=2,
-    label='增长率'
-)
-
-# 设置坐标轴格式
-ax1.set_xlabel('年份', fontsize=12)
-ax1.set_ylabel('数量', fontsize=12)
-ax2.set_ylabel('增长率', fontsize=12)
-ax2.yaxis.set_major_formatter(PercentFormatter(1.0))  # 转换为百分比格式
-
-# 设置双轴刻度范围
-ax1.set_ylim(0, max(values)*1.2)
-ax2.set_ylim(min(growth_rates)*1.1 if not np.isnan(min(growth_rates)) else 0, 
-            max(growth_rates)*1.1 if not np.isnan(max(growth_rates)) else 1)
-
-# 设置图表标题
-plt.title('供应链转移趋势分析（2013-2024）', fontsize=14, pad=20)
-
-# 合并图例
-lines = [bars[0], line]
-labels = [l.get_label() for l in lines]
-ax1.legend(lines, labels, loc='upper left', frameon=True)
-
-# 添加数据标签
-for bar in bars:
-    height = bar.get_height()
-    ax1.text(bar.get_x() + bar.get_width()/2., height,
-             f'{int(height)}',
-             ha='center', va='bottom')
-
-# 设置网格线
-ax1.grid(axis='y', linestyle='--', alpha=0.7)
-ax2.grid(visible=False)
-
-# 调整布局
-plt.tight_layout()
-plt.show()
 #endregion 年度时间趋势图可视化
 
