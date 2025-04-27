@@ -1,4 +1,6 @@
 # region ######################################################  开始必备执行代码   
+import gc
+import math
 import os
 
 import numpy as np
@@ -152,7 +154,7 @@ for index in new_index_list:
     ccc += 1
 
 
-
+c=0
 for index in new_index_list:
 
     target_cop_name = df_sc.loc[index,'target_company_id']
@@ -438,8 +440,46 @@ for rel in loaded_relation_data:
     )
     # print(f'已解决{count+1}')
     count+=1
+len(restored_relations)
 
-restored_relations
+# region 对relations对象进行一定的时间删减来减轻内存压力
+def delete_old_relations(relations, filter_year):
+
+    # 分离供应链关系数据 和 供应链状态数据
+    # 第一阶段：标记所有有效节点
+    valid_indices = [
+        rel for rel in relations
+        if rel.start.year >= filter_year or rel.end.year >= filter_year
+    ]
+        
+    return valid_indices
+
+restored_relations = delete_old_relations(restored_relations, 2015)
+len(restored_relations) #删减后的关系数
+
+##################################################存储relation变量
+# 将对象转换为字典列表
+data_to_save = []
+count = 0
+total = len(restored_relations)
+for relation in restored_relations:
+    data_to_save.append({
+        'from_co': relation.from_co.id,
+        'to_co': relation.to_co.id,
+        'start': relation.start.strftime("%Y-%m-%d"),  # 格式化为字符串
+        'end': relation.end.strftime("%Y-%m-%d"),  # 含时分秒
+        'status' :relation.status
+    })
+    print(f'已转换并保存 {count+1}/{total}')
+    count += 1
+ 
+
+################################################### 写入JSON文件
+with open(path_dic['middle'] + '\\' + 'supply_relations.json', 'w') as f:
+    json.dump(data_to_save, f, indent=4)
+print("数据已保存至 supply_relations.json")
+
+#endregion 对relations对象进行一定的时间删减来减轻内存压力
 
  # 初始化分析器
 analyzer = SupplyChainAnalyzer(restored_relations, recovery_period=90,end_date=datetime(2024,12,31))
@@ -456,13 +496,17 @@ len(analyzer.graph)
 #     print(f"{t['supplier']} 从 {t['from_client']} 转移到 {t['to_client']} "
 #             f"(间隔 {t['gap_days']} 天)")
 
-
+36274
 # 查找长度≥1  <=10的供应链,先查找100个  （修改dfs算法，增加一层供应链含中量检测）
-chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=0,end_index=len(analyzer.graph)+1)
-# chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=0,end_index=math.floor(len(analyzer.graph)/3))
-# chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=math.floor(len(analyzer.graph)/3),end_index=math.floor(len(analyzer.graph)/3*2))
-# chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=math.floor(len(analyzer.graph)/3*2),end_index=len(analyzer.graph)+1)
-count = 0 
+# chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=0,end_index=len(analyzer.graph)+1)
+# chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=0,end_index=math.floor(len(analyzer.graph)/6))
+# chains = analyzer.find_supply_chains(min_length=1,max_depth=4,start_index=math.floor(len(analyzer.graph)/6),end_index = math.floor(len(analyzer.graph)/6*2))
+# chains = analyzer.find_supply_chains(min_length=1, max_depth=4, start_index=math.floor(len(analyzer.graph)/6*2), end_index=math.floor(len(analyzer.graph)/6*3))
+# chains = analyzer.find_supply_chains(min_length=1, max_depth=4, start_index=math.floor(len(analyzer.graph)/6*3), end_index=math.floor(len(analyzer.graph)/6*4))
+# chains = analyzer.find_supply_chains(min_length=1, max_depth=4, start_index=math.floor(len(analyzer.graph)/6*4), end_index=math.floor(len(analyzer.graph)/6*5))
+chains = analyzer.find_supply_chains(min_length=1, max_depth=4, start_index=math.floor(len(analyzer.graph)/6*5), end_index=len(analyzer.graph)+1)
+
+count = 0
 for chain in chains:
     print(chain)
     if count >50:
@@ -622,14 +666,23 @@ len(parsed_data)
 #     count+=1
 
 # 保存文件
-with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', 'w', encoding='utf-8') as f:
-    json.dump(parsed_data, f, indent=2, ensure_ascii=False)
+# with open(path_dic['middle'] + '\\' +'complete_supply_chains.json', 'w', encoding='utf-8') as f:
+#     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
 # with open(path_dic['middle'] + '\\' +'complete_supply_chains_1.json', 'w', encoding='utf-8') as f:
 #     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
 # with open(path_dic['middle'] + '\\' +'complete_supply_chains_2.json', 'w', encoding='utf-8') as f:
 #     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
 # with open(path_dic['middle'] + '\\' +'complete_supply_chains_3.json', 'w', encoding='utf-8') as f:
 #     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
+# with open(path_dic['middle'] + '\\' +'complete_supply_chains_4.json', 'w', encoding='utf-8') as f:
+#     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
+# with open(path_dic['middle'] + '\\' +'complete_supply_chains_5.json', 'w', encoding='utf-8') as f:
+#     json.dump(parsed_data, f, indent=2, ensure_ascii=False)
+with open(path_dic['middle'] + '\\' +'complete_supply_chains_6.json', 'w', encoding='utf-8') as f:
+    json.dump(parsed_data, f, indent=2, ensure_ascii=False)
+del chains
+gc.collect()  # 手动触发垃圾回收
+# 如果手动触发垃圾回收仍然没法有效回收内存，所以需要关闭python进程再重新运算
 
 
 # region数据结构片段解释：
