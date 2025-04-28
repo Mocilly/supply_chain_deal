@@ -523,7 +523,6 @@ plot_combined_supply_chain_1()
 
 
 
-
 def plot_combined_supply_chain_2():
     # 设置中文字体和图表风格
     plt.rcParams['font.sans-serif'] = ['SimHei']

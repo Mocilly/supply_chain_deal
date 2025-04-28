@@ -280,7 +280,30 @@ def calculate_average_ratio(relations, company_to_country):
 
     average_ratio = local_supplier_count / (local_supplier_count + foreign_supplier_count) if (local_supplier_count + foreign_supplier_count) > 0 else 0
 
-    return local_supplier_count, average_ratio
+    return local_supplier_count,foreign_supplier_count, average_ratio
+
+# 统计转移到中国的供应链中外资在华供应商数量和单个公司平均本土供应关系数量占比
+def calculate_average_ratio_2(relations, company_to_country):
+
+    local_supplier_count = 0
+    foreign_supplier_count = 0
+
+    for rel in relations:
+        nation_not_found_from = 'Nation_Not_Found' in company_to_country[rel.from_co.id][0] or 'Nation_Not_Found' in company_to_country[rel.from_co.id][1]
+        nation_not_found_to = 'Nation_Not_Found' in company_to_country[rel.to_co.id][0] or 'Nation_Not_Found' in company_to_country[rel.to_co.id][1]
+        if nation_not_found_from or nation_not_found_to:
+            # 如果起始公司或目标公司在国家映射中未找到，则跳过该关系
+            continue
+        else:
+            if any(area not in company_to_country[rel.to_co.id][1] for area in ['CN', 'HK', 'MO']) and \
+                any(area  in company_to_country[rel.to_co.id][0] for area in ['CN', 'HK', 'MO']):
+                local_supplier_count += 1
+            else:
+                foreign_supplier_count += 1
+
+    average_ratio = local_supplier_count / (local_supplier_count + foreign_supplier_count) if (local_supplier_count + foreign_supplier_count) > 0 else 0
+
+    return local_supplier_count,foreign_supplier_count, average_ratio
 
 def get_native_company_set(pattern_paths, company_to_country):
     """
@@ -310,6 +333,28 @@ def get_native_company_set(pattern_paths, company_to_country):
 
     return native_cop_set
 
+def get_all_company_set(pattern_paths, company_to_country):
+    """
+    获取所有公司集合
+    
+    :param pattern_paths: 供应链关系路径列表
+    :param company_to_country: 公司到国家的映射字典
+    :return: 本土公司集合
+    """
+    all_cop_set = set()
+    # cn_mainland__SAR = ['CN', 'HK', 'MO']
+
+    for rel in pattern_paths:
+
+        if 'Nation_Not_Found' not in company_to_country[rel.from_co.id][0] and \
+            'Nation_Not_Found' not in company_to_country[rel.from_co.id][1]:
+            all_cop_set.add(rel.from_co.id)
+
+        if 'Nation_Not_Found' not in company_to_country[rel.to_co.id][0] and \
+            'Nation_Not_Found' not in company_to_country[rel.to_co.id][1]:
+            all_cop_set.add(rel.to_co.id)
+
+    return all_cop_set
 
 
 # 本土转移供应链中新增中国本土公司数量（年份）
@@ -318,12 +363,27 @@ cop_native_count_by_year = create_time_keyed_dict(
     end_date=datetime(2024, 12, 31),
     increment='year'
 )
-for year in range(2015, 2025):  # 从2013年到2024年
+for year in range(2015, 2025):  # 从2015年到2024年
     yearly_relations = [
         rel for rel in pattern_paths if rel.start.year == year
     ]
     yearly_native_cop_set = get_native_company_set(yearly_relations, company_to_country)
     cop_native_count_by_year[datetime(year, 1, 1)] = len(yearly_native_cop_set)
+
+
+# 本土新增转移供应链中中国外资公司数量（年份）
+cop_foreign_count_by_year = create_time_keyed_dict(
+    start_date=datetime(2015, 1, 1),
+    end_date=datetime(2024, 12, 31),
+    increment='year'
+)
+for year in range(2015, 2025):  # 从2013年到2024年
+    yearly_relations = [
+        rel for rel in pattern_paths if rel.start.year == year
+    ]
+    yearly_native_cop_set = get_all_company_set(yearly_relations, company_to_country) - get_native_company_set(yearly_relations, company_to_country)
+    cop_foreign_count_by_year[datetime(year, 1, 1)] = len(yearly_native_cop_set)
+
 
 
 all_native_cop_set = set()  # 供应链中的source公司集合  ,此处创建空集合  ,集合中只有唯一值，将所有公司储存进去
@@ -347,19 +407,6 @@ cop_native_ratio_by_year = create_time_keyed_dict(
 )
 
 
-# # 3. 查找包含特定节点的路径
-def find_paths_containing_node(target_node,relations):
-    results = []
-    for rel in relations:
-        # 检查供应链关系中是否包含目标节点
-        if target_node in (rel.from_co.id, rel.to_co.id):
-            results.append(rel)
-    return results
-
-c4_paths = find_paths_containing_node('20721363',pattern_paths)
-c4_paths
-print(f"找到 {len(c4_paths)} 条包含 20721363 的路径")
-
 
 for year in range(2015, 2025):  # 从2013年到2024年
     yearly_relations = [
@@ -368,9 +415,9 @@ for year in range(2015, 2025):  # 从2013年到2024年
     yearly_native_cop_set = get_native_company_set(yearly_relations, company_to_country)  # 获取本土公司集合
     ratio_list = []  # 存储每个本土公司的 本土供应商平均比例
     for i,cop in enumerate(yearly_native_cop_set):
-        local_supplier_count, average_ratio = calculate_average_ratio(yearly_relations, company_to_country)
-        if local_supplier_count == 0:
-            print(f"公司ID：{cop}，本土供应商数量：{local_supplier_count}，平均比例：{average_ratio:.2%}")
+        local_supplier_count,foreign_supplier_count,average_ratio = calculate_average_ratio(yearly_relations, company_to_country)
+        # if local_supplier_count != 0:
+        #     print(f"公司ID：{cop}，本土供应商数量：{local_supplier_count}，平均比例：{average_ratio:.2%}")
         ratio_list.append(average_ratio)  # 将每个本土公司的平均比例添加到列表中
         # print(f'已经处理{i+1}/{len(yearly_native_cop_set)}个本土公司')
     # 计算 本土公司 的 本土供应商比例 的 平均比例
@@ -384,6 +431,62 @@ for year in range(2015, 2025):  # 从2013年到2024年
     print(f"年份：{year}, 本土公司新增供应商 平均本土供应商比例：{list_average_ratio:.2%}") 
 
 cop_native_ratio_by_year
+
+cop_foreign_ratio_by_year = create_time_keyed_dict(
+    start_date=datetime(2015, 1, 1),
+    end_date=datetime(2024, 12, 31),
+    increment='year'
+)
+for year in range(2015, 2025):  # 从2015年到2024年
+    yearly_relations = [
+        rel for rel in pattern_paths if rel.start.year == year
+    ] #固定特定年份的供应链关系
+    ratio_list = []  # 存储每个本土公司的 本土供应商平均比例
+    for i,cop in enumerate(yearly_native_cop_set):
+        local_supplier_count,foreign_supplier_count, average_ratio = calculate_average_ratio(yearly_relations, company_to_country)
+        # if foreign_supplier_count != 0:
+        #     print(f"公司ID：{cop}，外资供应商数量：{local_supplier_count}，平均比例：{average_ratio:.2%}")
+        ratio_list.append(1-average_ratio)  # 将每个本土公司的平均比例添加到列表中
+        # print(f'已经处理{i+1}/{len(yearly_native_cop_set)}个本土公司')
+    # 计算 本土公司 的 本土供应商比例 的 平均比例
+    if not ratio_list:
+        print(f"年份：{year} 没有本土公司数据，无法计算平均比例。")
+        list_average_ratio = 0.0  # 或其他默认值
+    else:
+        list_average_ratio = sum(ratio_list) / len(ratio_list)
+
+    cop_foreign_ratio_by_year[datetime(year, 1, 1)] = round(list_average_ratio, 2)  # 将平均比例保留两位小数并存入字典中
+    print(f"年份：{year}, 本土公司新增供应商 平均外资供应商比例：{list_average_ratio:.2%}") 
+
+
+cop_foreign_in_cn_ratio_by_year = create_time_keyed_dict(
+    start_date=datetime(2015, 1, 1),
+    end_date=datetime(2024, 12, 31),
+    increment='year'
+)
+for year in range(2015, 2025):  # 从2015年到2024年
+    yearly_relations = [
+        rel for rel in pattern_paths if rel.start.year == year
+    ] #固定特定年份的供应链关系
+    ratio_list = []  # 存储每个本土公司的 本土供应商平均比例
+    for i,cop in enumerate(yearly_native_cop_set):
+        foreign_in_cn_supplier_count,foreign_supplier_count, average_ratio = calculate_average_ratio(yearly_relations, company_to_country)
+        # if foreign_supplier_count != 0:
+        #     print(f"公司ID：{cop}，外资供应商数量：{local_supplier_count}，平均比例：{average_ratio:.2%}")
+        ratio_list.append(1-average_ratio)  # 将每个本土公司的平均比例添加到列表中
+        # print(f'已经处理{i+1}/{len(yearly_native_cop_set)}个本土公司')
+    # 计算 本土公司 的 本土供应商比例 的 平均比例
+    if not ratio_list:
+        print(f"年份：{year} 没有本土公司数据，无法计算平均比例。")
+        list_average_ratio = 0.0  # 或其他默认值
+    else:
+        list_average_ratio = sum(ratio_list) / len(ratio_list)
+
+    cop_foreign_ratio_by_year[datetime(year, 1, 1)] = round(list_average_ratio, 2)  # 将平均比例保留两位小数并存入字典中
+    print(f"年份：{year}, 本土公司新增供应商 平均外资在华供应商比例：{list_average_ratio:.2%}") 
+
+
+
 #region 年度数据趋势图可视化
 
 
@@ -502,10 +605,10 @@ def plot_supply_chain_trend(values, values_2, bars_label, line_label, x_label, y
 plot_supply_chain_trend(
     values=cn_transfer_rel_by_year,
     values_2=native_transfer_count_by_year,
-    bars_label="转向中国的新增供应链数量",
+    bars_label="新增供应链转向中国的数量",
     line_label="中国本土公司间新增供应链数量",
     x_label="年份",
-    y_label_left="转向中国的新增供应链数量",
+    y_label_left="新增供应链转向中国的数量",
     y_label_right="中国本土公司间新增供应链数量",
     title="供应链转移趋势分析",
     accuracy=0
@@ -519,6 +622,30 @@ plot_supply_chain_trend(
     x_label="年份",
     y_label_left="本土新增供应关系中——本土公司数量",
     y_label_right="本土公司新增供应商——本土公司占比",
+    title="供应商转移趋势分析",
+    accuracy=2
+)
+
+plot_supply_chain_trend(
+    values=cop_foreign_count_by_year,
+    values_2=cop_foreign_ratio_by_year,
+    bars_label="本土新增供应关系中——本土公司数量",
+    line_label="本土公司新增供应商——外资公司占比",
+    x_label="年份",
+    y_label_left="本土新增供应关系中——本土公司数量",
+    y_label_right="本土公司新增供应商——外资公司占比",
+    title="供应商转移趋势分析",
+    accuracy=2
+)
+
+plot_supply_chain_trend(
+    values=cop_foreign_count_by_year,
+    values_2=cop_foreign_ratio_by_year,
+    bars_label="本土新增供应关系中——本土公司数量",
+    line_label="本土公司新增供应商——外资在华公司占比",
+    x_label="年份",
+    y_label_left="本土新增供应关系中——本土公司数量",
+    y_label_right="本土公司新增供应商——外资在华公司占比",
     title="供应商转移趋势分析",
     accuracy=2
 )
