@@ -1,5 +1,5 @@
 import pandas as pd
-
+import json
 
 df = pd.read_excel(r'C:\Users\Mocilly\Desktop\GB_T 4754-2017 国民经济行业分类（一维表）.xlsx')
 
@@ -52,13 +52,18 @@ df.drop(index=null_list, inplace=True)
 
 df.drop(columns=['NAME'], inplace=True)
 
-# 输出到txt中，用：间隔
-output_file = r'C:\Users\Mocilly\Desktop\output.txt'
+
+
+# 输出到JSONL文件（每行一个JSON对象）
+output_file = r'C:\Users\Mocilly\Desktop\output.jsonl'
+
 with open(output_file, 'w', encoding='utf-8') as f:
     for i in df.index:
-        line = ':'.join([str(df.loc[i, col]) for col in df.columns])
-        f.write(line + '\n')
-
+        # 将每行数据转为字典格式
+        record = {col: df.loc[i, col] for col in df.columns}
+        
+        # 写入JSON行格式（ensure_ascii=False保持中文可读）
+        f.write(json.dumps(record, ensure_ascii=False) + '\n')
 
 
 
