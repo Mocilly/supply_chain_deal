@@ -1,3 +1,4 @@
+from pathlib import Path
 import pandas as pd
 import json
 
@@ -39,7 +40,8 @@ for i in df.index:
 print(f'Sub count: {sub_count}')
 
 
-#查看df某一列中缺失项的索引
+#查看df某一列中缺失项的索引                                               
+
 null_list = df[df['DESCRIPTION'].isnull()].index.tolist()
 null_list
 df.loc[null_list]
@@ -52,18 +54,35 @@ df.drop(index=null_list, inplace=True)
 
 df.drop(columns=['NAME'], inplace=True)
 
-
-
-# 输出到JSONL文件（每行一个JSON对象）
-output_file = r'C:\Users\Mocilly\Desktop\output.jsonl'
-
+	# 输出路径
+output_file = Path(r'.\调用文件\用于行业分类分析的可视化表\output.jsonl')
+output_file.parent.mkdir(parents=True, exist_ok=True)
+ 
+def clean_data(x):
+    """数据清洗函数"""
+    if pd.isna(x):
+        return None
+    if isinstance(x, str):
+        # 清理换行符和反斜杠
+        return x.replace('\n', ' ').replace('\\', '')
+    return x
+ 
 with open(output_file, 'w', encoding='utf-8') as f:
     for i in df.index:
-        # 将每行数据转为字典格式
-        record = {col: df.loc[i, col] for col in df.columns}
-        
-        # 写入JSON行格式（ensure_ascii=False保持中文可读）
-        f.write(json.dumps(record, ensure_ascii=False) + '\n')
+        cleaned_record = df.loc[i].apply(clean_data).to_dict()
+        json_line = json.dumps(
+            cleaned_record,
+            ensure_ascii=False,
+            separators=(',', ':')
+        ) + '\n'  # 正确添加换行符
+        f.write(json_line)
+ 
+# 验证文件
+with open(output_file, 'r', encoding='utf-8') as f:
+    first_line = f.readline()
+    print(repr(first_line))  # 应输出：'{"INDUSTRY_ID":"0111","DESCRIPTION":"稻谷种植"}\n'
+
+
 
 
 

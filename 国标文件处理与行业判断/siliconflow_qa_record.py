@@ -34,72 +34,109 @@ def talk_initialize():
 
 
 
-def execute_conversation(messages):
+def execute_conversation(message):
     url, payload, headers = talk_initialize()  # 初始化API参数
     content_list = []
     is_finished = False
 
-    for message in messages:
-        payload["messages"] = [message]
-        response = requests.post(url, json=payload, headers=headers, stream=True)
 
-        # 检查请求是否成功
-        if response.status_code == 200:
-            is_finished = False
-            first_content_output = True
-            final_result = ""
+    payload["messages"] = [message]
+    response = requests.post(url, json=payload, headers=headers, stream=True)
 
-            for chunk in response.iter_lines():
-                if chunk:  # 过滤掉keep-alive新行
-                    chunk_str = chunk.decode('utf-8').strip()
-                    try:
-                        if chunk_str.startswith('data:'):
-                            chunk_str = chunk_str[6:].strip()  # 去除"data:"前缀和之后的首位空格
-                        if chunk_str == "[DONE]":  # 完成了
-                            is_finished = True
-                            break
+    # 检查请求是否成功
+    if response.status_code == 200:
+        is_finished = False
+        first_content_output = True
+        final_result = ""
 
-                        # 解析JSON
-                        chunk_json = json.loads(chunk_str)
-                        if 'choices' in chunk_json and isinstance(chunk_json['choices'], list) and len(chunk_json['choices']) > 0:
-                            choice = chunk_json['choices'][0]
-                            delta = choice.get('delta', {})
-                            # 获取结果信息
-                            content = delta.get('content')
+        for chunk in response.iter_lines():
+            if chunk:  # 过滤掉keep-alive新行
+                chunk_str = chunk.decode('utf-8').strip()
+                try:
+                    if chunk_str.startswith('data:'):
+                        chunk_str = chunk_str[6:].strip()  # 去除"data:"前缀和之后的首位空格
+                    if chunk_str == "[DONE]":  # 完成了
+                        is_finished = True
+                        break
 
-                            # 打印结果内容：content（如果有）
-                            if content is not None:
-                                final_result += content
-                                if first_content_output:
-                                    print("\n\n==============================\n结果:")
-                                    first_content_output = False
-                                print(content, end='', flush=True)
+                    # 解析JSON
+                    chunk_json = json.loads(chunk_str)
+                    if 'choices' in chunk_json and isinstance(chunk_json['choices'], list) and len(chunk_json['choices']) > 0:
+                        choice = chunk_json['choices'][0]
+                        delta = choice.get('delta', {})
+                        # 获取结果信息
+                        content = delta.get('content')
 
-                    except json.JSONDecodeError as e:
-                        print(f"JSON解码错误: {e}", flush=True)
+                        # 打印结果内容：content（如果有）
+                        if content is not None:
+                            final_result += content
+                            if first_content_output:
+                                print("\n\n==============================\n结果:")
+                                first_content_output = False
+                            print(content, end='', flush=True)
 
-            # 将最终结果存入content_list，去掉其中的换行符
-            content_list.append(final_result.replace('\n', '').strip())
+                except json.JSONDecodeError as e:
+                    print(f"JSON解码错误: {e}", flush=True)
 
-            # 如果对话完成，继续下一轮
-            if not is_finished:
-                print("\n对话未完成，无法继续下一轮。")
-                break
-        else:
-            print(f"请求失败，状态码: {response.status_code}, 错误信息: {response.text}")
-            break
+        # 将最终结果存入content_list，去掉其中的换行符
+        content_list.append(final_result.replace('\n', '').strip())
+
+    else:
+        print(f"请求失败，状态码: {response.status_code}, 错误信息: {response.text}")
 
     return content_list, is_finished
 
 
+with open(r'.\调用文件\用于行业分类分析的可视化表\output.jsonl', 'r', encoding='utf-8') as f:
+    lines = ""
+    for line in f:
+        data = json.loads(line.strip())
+        industry_id = data.get("INDUSTRY_ID", "")
+        description = data.get("DESCRIPTION", "")
+        lines += f"{industry_id}：{description}；\n"
+
 messages=[
-    {"role": "user", "content": "请简短的说一下hello"}
+    {"role": "user", "content": "请参照国民经济行业分类（GBT+4754_2017）2019修订进行判断，记住其中的行业代码(四位数)和行业描述用于判断我后续发给你的信息，\
+     接下来是命令：\n"
+     "我将发一组供应链关系的起始公司名称和相关的关键词，\
+     请通过联网查询相关信息来跟上述行业描述的内容相匹配来看所发信息属于哪一个行业，给出四位码，并给出判断依据，\
+     参考网址同步显示出来,判断中可将source_company_keyword权重调高,\n"
+     "等待我的下一个指令"
+     "\n"
+     },
+    
+    {"role": "user", "content":"参照国民经济行业分类表输出可能性最高的单个分类\n"
+     "显示格式：行业分类代码：xxxx（依照行业分类表数字），判断依据：xxxxxx，参考网址:列出参考信息的来源网址   \n "
+    "source_compan_name:Tejon Ranch Co.,target_company_name:Calpine Corp.,source_company_keyword：Tejon,target_company_keyword：National Cement Company of California\
+    ,keyword：oil and gas royalties,rock and aggregate royalties，royalties from a cement operation"},
+    {"role": "user", "content":"参照国民经济行业分类表输出可能性最高的单个分类\n"
+     "显示格式：行业分类代码：xxxx（依照行业分类表数字），判断依据：xxxxxx，参考网址:列出参考信息的来源网址   \n "
+    "source_compan_name:Tejon Ranch Co.,target_company_name:Calpine Corp.,source_company_keyword：Tejon,target_company_keyword：Calpine generating\
+    ,keyword：lease,electric power plant"},
+    {"role": "user", "content":"参照国民经济行业分类表输出可能性最高的单个分类\n"
+     "显示格式：行业分类代码：xxxx（依照行业分类表数字），判断依据：xxxxxx，参考网址:列出参考信息的来源网址   \n "
+    "source_compan_name:Tejon Ranch Co.,target_company_name:Calpine Corp.,source_company_keyword：Tejon,target_company_keyword：Pastoria Energy Facility, L.L.C\
+    ,keyword：tenant"},
 ]
 
-
+content_list = []
 # 返回是否结束的状态
-content_list,is_finished = execute_conversation(messages)
-content_list
+content,is_finished = execute_conversation(messages[0])
+
+# 逐条执行对话，返回是否结束的状态
+content,is_finished = execute_conversation(messages[1])
+content_list.append(content)
+content,is_finished = execute_conversation(messages[2])
+content_list.append(content)
+content,is_finished = execute_conversation(messages[3])
+content_list.append(content[3])
+
+# 将content_list写入JSON文件
+output_path = r'.\调用文件\用于行业分类分析的可视化表\conversation_output.json'
+with open(output_path, 'w', encoding='utf-8') as json_file:
+    json.dump(content_list, json_file, ensure_ascii=False, indent=4)
+
+print(f"内容已成功写入到 {output_path}")
 
 
 
@@ -107,51 +144,4 @@ content_list
 
 
 
-def file_talk_initialize():
-    
-    # 配置参数
-    api_key = "sk-mqxdbrnlwcmdflpjmkoekrefarzcuyvwgszwhfltcjodzxyr"  # 替换为你的API Key
-    url = "https://api.siliconflow.cn/v1/files"  # 以文档实际地址为准
-
-    # 设置请求头
-    headers = {
-        "Authorization": f"Bearer {api_key}",
-    }
-    return url, headers
-
-
-url,headers = file_talk_initialize()  # 初始化API参数
-# 要上传的文件路径
-file_path = r'.\调用文件\时间趋势分析\company.json'
-
-
-
-# 读取文件内容
-try:
-    with open(file_path, "rb") as file:
-        files = {
-            "file": (file_path.split("/")[-1], file, "application/octet-stream")
-        }
-
-        # 发送POST请求
-        response = requests.post(
-            url,
-            headers=headers,
-            files=files,
-            data={"purpose": "batch"},  # 关键修复点：添加purpose参数
-            timeout=30  # 根据文件大小调整超时时间
-        )
-
-        # 处理响应
-        if response.status_code == 200:
-            print("文件上传成功！")
-            print("响应数据：", response.json())
-        else:
-            print(f"上传失败，状态码：{response.status_code}")
-            print("错误信息：", response.text)
-
-except FileNotFoundError:
-    print(f"文件不存在：{file_path}")
-except Exception as e:
-    print(f"发生异常：{str(e)}")
 

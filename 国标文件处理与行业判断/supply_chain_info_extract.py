@@ -39,7 +39,10 @@ length_df_sc = len(df_sc.index)
 info_dict = {}
 for index, row in df_sc.iterrows():
     row_info = extract_row_info(row)
-    row_info_str = dict_to_string(row_info)
+    if row_info['SOURCE_name'] == '' or row_info['TARGET_name'] == '':
+        row_info_str = 'info_not_found'
+    else:
+        row_info_str = dict_to_string(row_info)
     if row_info_str not in info_dict:
         info_dict[row_info_str] = []
     info_dict[row_info_str].append(index)
@@ -56,7 +59,7 @@ for i, (key, value) in enumerate(info_dict.items()):
 
 # 将字典输出到json文件予以存储
 
-output_file = r'.\调用文件\用于行业分类分析的可视化表info_dict.json'
+output_file = r'.\调用文件\用于行业分类分析的可视化表\用于行业分类分析的可视化表info_dict.json'
 os.makedirs(os.path.dirname(output_file), exist_ok=True)
 
 with open(output_file, 'w', encoding='utf-8') as f:
