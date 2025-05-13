@@ -4,7 +4,7 @@ import json
 
 
 
-def talk_initialize():
+def talk_initialize(sk = 'sk-mqxdbrnlwcmdflpjmkoekrefarzcuyvwgszwhfltcjodzxyr',model="deepseek-ai/DeepSeek-R1"):
     # 这里可以添加初始化代码，例如设置API密钥等
     url = "https://api.siliconflow.cn/v1/chat/completions"
     model="deepseek-ai/DeepSeek-R1"
@@ -26,7 +26,7 @@ def talk_initialize():
     }
 
     headers = {
-        "Authorization": "Bearer sk-mqxdbrnlwcmdflpjmkoekrefarzcuyvwgszwhfltcjodzxyr",
+        "Authorization": f"Bearer {sk}",
         "Content-Type": "application/json"
     }
     return url, payload, headers
@@ -87,56 +87,68 @@ def execute_conversation(message):
     return content_list, is_finished
 
 
-with open(r'.\调用文件\用于行业分类分析的可视化表\output.jsonl', 'r', encoding='utf-8') as f:
-    lines = ""
-    for line in f:
-        data = json.loads(line.strip())
-        industry_id = data.get("INDUSTRY_ID", "")
-        description = data.get("DESCRIPTION", "")
-        lines += f"{industry_id}：{description}；\n"
+def process_lines_to_dict(file_path):
+    result_dict = {}
+    with open(file_path, 'r', encoding='utf-8') as f:
+        for line in f:
+            data = json.loads(line.strip())
+            industry_id = data.get("INDUSTRY_ID", "")
+            description = data.get("DESCRIPTION", "")
+            if industry_id and description:
+                result_dict[industry_id] = description
+    return result_dict
 
+# Example usage
+file_path = r'.\调用文件\用于行业分类分析的可视化表\output.jsonl'
+lines_dict = process_lines_to_dict(file_path)
+
+
+
+# 示例测试代码  如下
 messages=[
-    {"role": "user", "content": "请参照国民经济行业分类（GBT+4754_2017）2019修订进行判断，记住其中的行业代码(四位数)和行业描述用于判断我后续发给你的信息，\
-     接下来是命令：\n"
-     "我将发一组供应链关系的起始公司名称和相关的关键词，\
-     请通过联网查询相关信息来跟上述行业描述的内容相匹配来看所发信息属于哪一个行业，给出四位码，并给出判断依据，\
-     参考网址同步显示出来,判断中可将source_company_keyword权重调高,\n"
-     "等待我的下一个指令"
-     "\n"
-     },
+
+    {"role": "user", "content": 
+    "我接下来将发一组供应链关系的起始公司名称和相关的关键词，\
+     请通过联网查询相关信息来跟中国国民经济行业分类标准（2017）2019修订版相匹配来看所发的供应链信息属于哪一个行业，给出行业四位码，并给出判断依据，\
+     参考信息网址同步显示出来,判断中可将source_company_keyword中的查询所得信息和keyword中的查询所得信息的权重调高,\n"
     
-    {"role": "user", "content":"参照国民经济行业分类表输出可能性最高的单个分类\n"
-     "显示格式：行业分类代码：xxxx（依照行业分类表数字），判断依据：xxxxxx，参考网址:列出参考信息的来源网址   \n "
+    },
+    {"role": "user", "content":
+      "参照中国国民经济行业分类标准的行业代码和行业描述来输出下列信息中可能性最高的单个分类\n"
+     "显示格式：行业分类代码：xxxx（依据中国国民经济行业分类），判断依据：xxxxxx，参考网址:xxxx（列出下方供应链信息联网搜索后得到的信息参考的网址，诸如查询该公司所得的业务信息）\n"
     "source_compan_name:Tejon Ranch Co.,target_company_name:Calpine Corp.,source_company_keyword：Tejon,target_company_keyword：National Cement Company of California\
     ,keyword：oil and gas royalties,rock and aggregate royalties，royalties from a cement operation"},
-    {"role": "user", "content":"参照国民经济行业分类表输出可能性最高的单个分类\n"
-     "显示格式：行业分类代码：xxxx（依照行业分类表数字），判断依据：xxxxxx，参考网址:列出参考信息的来源网址   \n "
+    
+    {"role": "user", "content":   "参照中国国民经济行业分类标准的行业代码和行业描述来输出下列信息中可能性最高的单个分类\n"
+     "显示格式：行业分类代码：xxxx（依据中国国民经济行业分类），判断依据：xxxxxx，参考网址:xxxx（列出下方供应链信息联网搜索后得到的信息参考的网址，诸如查询该公司所得的业务信息）\n"
     "source_compan_name:Tejon Ranch Co.,target_company_name:Calpine Corp.,source_company_keyword：Tejon,target_company_keyword：Calpine generating\
     ,keyword：lease,electric power plant"},
-    {"role": "user", "content":"参照国民经济行业分类表输出可能性最高的单个分类\n"
-     "显示格式：行业分类代码：xxxx（依照行业分类表数字），判断依据：xxxxxx，参考网址:列出参考信息的来源网址   \n "
+
+    {"role": "user", "content":   "参照中国国民经济行业分类标准的行业代码和行业描述来输出下列信息中可能性最高的单个分类\n"
+     "显示格式：行业分类代码：xxxx（依据中国国民经济行业分类），判断依据：xxxxxx，参考网址:xxxx（列出下方供应链信息联网搜索后得到的信息参考的网址，诸如查询该公司所得的业务信息）\n"
     "source_compan_name:Tejon Ranch Co.,target_company_name:Calpine Corp.,source_company_keyword：Tejon,target_company_keyword：Pastoria Energy Facility, L.L.C\
     ,keyword：tenant"},
 ]
 
-content_list = []
-# 返回是否结束的状态
-content,is_finished = execute_conversation(messages[0])
+# content_list = []
+# # 返回是否结束的状态
+# content,is_finished = execute_conversation(messages[0])
 
-# 逐条执行对话，返回是否结束的状态
-content,is_finished = execute_conversation(messages[1])
-content_list.append(content)
-content,is_finished = execute_conversation(messages[2])
-content_list.append(content)
-content,is_finished = execute_conversation(messages[3])
-content_list.append(content[3])
+# # 逐条执行对话，返回是否结束的状态
+# content,is_finished = execute_conversation(messages[1])
+# content_list.append(content)
+# content,is_finished = execute_conversation(messages[2])
+# content_list.append(content)
+# content,is_finished = execute_conversation(messages[3])
+# content_list.append(content[3])
 
-# 将content_list写入JSON文件
-output_path = r'.\调用文件\用于行业分类分析的可视化表\conversation_output.json'
-with open(output_path, 'w', encoding='utf-8') as json_file:
-    json.dump(content_list, json_file, ensure_ascii=False, indent=4)
 
-print(f"内容已成功写入到 {output_path}")
+# # 将content_list写入JSON文件
+# output_path = r'.\调用文件\用于行业分类分析的可视化表\conversation_output.json'
+# with open(output_path, 'w', encoding='utf-8') as json_file:
+#     json.dump(content_list, json_file, ensure_ascii=False, indent=4)
+
+# print(f"内容已成功写入到 {output_path}")
 
 
 
