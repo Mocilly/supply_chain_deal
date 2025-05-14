@@ -184,18 +184,6 @@ def execute_and_save(start_line, end_line):
 
 ####################    接下来是分布执行对话（多开VScode客户端来实现），每个对话50个就将对话结果存入文件中（避免tokens过长 ds记不住上下文） ####################
 #region vscode客户端1执行的代码片段：
-for r in range(0, 10):
-
-    for i in range(10000*r, 10000*(r+1), 100):
-        start_line = i
-        end_line = i +99
-        if i in [0, 100,200,300,400]:
-            continue
-        # 调用函数并保存结果
-        print(f"正在处理行 {start_line} 到 {end_line}...")
-        execute_and_save(start_line, end_line)
-#endregion
-
 
 
 #region vscode客户端2执行的代码片段：
@@ -209,90 +197,3 @@ for r in range(10, 20):
         execute_and_save(start_line, end_line)
 #endregion
 
-#region vscode客户端3执行的代码片段：
-for r in range(20, 30):
-
-    for i in range(10000*r, 10000*(r+1), 100):
-        start_line = i
-        end_line = i + 99
-        # 调用函数并保存结果
-        print(f"正在处理行 {start_line} 到 {end_line}...")
-        execute_and_save(start_line, end_line)
-#endregion
-
-
-#region vscode客户端4执行的代码片段：
-for r in range(30, 40):
-
-    for i in range(10000*r, 10000*(r+1), 100):
-        start_line = i
-        end_line = i + 99
-        # 调用函数并保存结果
-        print(f"正在处理行 {start_line} 到 {end_line}...")
-        execute_and_save(start_line, end_line)
-#endregion
-
-#region vscode客户端5执行的代码片段：
-for r in range(40, 50):
-
-    for i in range(10000*r, 10000*(r+1), 100):
-        start_line = i
-        end_line = i + 99
-        # 调用函数并保存结果
-        print(f"正在处理行 {start_line} 到 {end_line}...")
-        execute_and_save(start_line, end_line)
-#endregion
-
-#region vscode客户端6执行的代码片段：
-for r in range(50, 60):
-
-    for i in range(10000*r, 10000*(r+1), 100):
-        start_line = i
-        end_line = i + 99
-        # 调用函数并保存结果
-        print(f"正在处理行 {start_line} 到 {end_line}...")
-        execute_and_save(start_line, end_line)
-#endregion
-
-#region vscode客户端7执行的代码片段：
-for r in range(60, 70):
-
-    for i in range(10000*r, 10000*(r+1), 100):
-        start_line = i
-        end_line = i + 99
-        # 调用函数并保存结果
-        print(f"正在处理行 {start_line} 到 {end_line}...")
-        execute_and_save(start_line, end_line)
-#endregion
-
-#region vscode客户端8执行的代码片段：
-for r in range(70, 80):
-
-    for i in range(10000*r, 10000*(r+1), 100):
-        start_line = i
-        end_line = i + 99
-        # 调用函数并保存结果
-        print(f"正在处理行 {start_line} 到 {end_line}...")
-        execute_and_save(start_line, end_line)
-#endregion
-
-#region vscode客户端9执行的代码片段：
-for r in range(80, 90):
-
-    for i in range(10000*r, 10000*(r+1), 100):
-        start_line = i
-        end_line = i + 99
-        # 调用函数并保存结果
-        print(f"正在处理行 {start_line} 到 {end_line}...")
-        execute_and_save(start_line, end_line)
-#endregion
-
-#region vscode客户端10执行的代码片段：
-for r in range(90, 100):
-
-    for i in range(10000*r, 10000*(r+1), 100):
-        start_line = i
-        end_line = i + 99
-        # 调用函数并保存结果
-        print(f"正在处理行 {start_line} 到 {end_line}...")
-        execute_and_save(start_line, end_line)
