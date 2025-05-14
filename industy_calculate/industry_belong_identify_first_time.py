@@ -77,7 +77,7 @@ def extract_relevant_data(data):
         
     return result
 
-with open(r'.\调用文件\加入跨国公司统计后的可视化表\用于行业分类分析的可视化表info_dict.json', 'r', encoding='utf-8') as f:
+with open(r'.\调用文件\用于行业分类分析的可视化表\用于行业分类分析的可视化表info_dict.json', 'r', encoding='utf-8') as f:
     file_content_dict = extract_relevant_data(json.load(f))
 
 #查看前10条数据
@@ -136,7 +136,7 @@ def construct_message_from_key(key):
 #     industry_code = extract_industry_code(content)
 #     content_list.append(industry_code)
 
-def execute_conversation_with_range(start_line, end_line):
+def execute_conversation_with_range(url, payload, headers,start_line, end_line):
     """
     执行对话内容，支持指定起止行数范围，并输出修改的字典行
 
@@ -149,7 +149,7 @@ def execute_conversation_with_range(start_line, end_line):
     """
     
     modified_entries = {}
-    _, _ = execute_conversation({
+    _, _ = execute_conversation(url, payload, headers,{
         "role": "user", "content": message_need_to_add[0]})
     for i, (key, value) in enumerate(file_content_dict.items()):
         if i < start_line or i > end_line:
@@ -157,7 +157,8 @@ def execute_conversation_with_range(start_line, end_line):
             continue
         message = construct_message_from_key(key)
         message_send = message_need_to_add[1] + message
-        content, _ = execute_conversation({"role": "user", "content": message_send})
+        content, _ = execute_conversation(url, payload, headers,
+                                          {"role": "user", "content": message_send})
         index_list = value
         # 转换 key 为字符串并按照顺序排列
         key_str = f"SOURCE_name:{key[0]}|\
@@ -173,12 +174,12 @@ def execute_conversation_with_range(start_line, end_line):
 
 # 示例调用
 def execute_and_save(start_line, end_line):
-    talk_initialize(sk = 'sk-mqxdbrnlwcmdflpjmkoekrefarzcuyvwgszwhfltcjodzxyr',model="deepseek-ai/DeepSeek-V3")
-    modified_entries = execute_conversation_with_range(start_line, end_line)
+    url, payload, headers = talk_initialize(sk = 'sk-mqxdbrnlwcmdflpjmkoekrefarzcuyvwgszwhfltcjodzxyr',model="Pro/deepseek-ai/DeepSeek-V3")
+    modified_entries = execute_conversation_with_range(url, payload, headers,start_line, end_line)
 #存储修改行的字典
     execute_order = f"{start_line}-{end_line}"
     sleep(2)
-    output_file_path = fr'.\调用文件\加入跨国公司统计后的可视化表\中间文件\industry_identify_{execute_order}.json'
+    output_file_path = fr'.\调用文件\用于行业分类分析的可视化表\中间文件\industry_identify_{execute_order}.json'
     with open(output_file_path, 'w', encoding='utf-8') as f:
         json.dump(modified_entries, f, ensure_ascii=False, indent=4)
     sleep(1)
@@ -189,20 +190,24 @@ def execute_and_save(start_line, end_line):
 #region vscode客户端1执行的代码片段：
 for r in range(0, 10):
 
-    for i in range(10000*r, 10000*(r+1), 50):
+    for i in range(10000*r, 10000*(r+1), 100):
         start_line = i
-        end_line = i + 49
+        end_line = i +99
+        if i == 0 or i == 100:
+            continue
         # 调用函数并保存结果
         print(f"正在处理行 {start_line} 到 {end_line}...")
         execute_and_save(start_line, end_line)
 #endregion
 
+
+
 #region vscode客户端2执行的代码片段：
 for r in range(10, 20):
 
-    for i in range(10000*r, 10000*(r+1), 50):
+    for i in range(10000*r, 10000*(r+1), 100):
         start_line = i
-        end_line = i + 49
+        end_line = i + 99
         # 调用函数并保存结果
         print(f"正在处理行 {start_line} 到 {end_line}...")
         execute_and_save(start_line, end_line)
@@ -211,42 +216,43 @@ for r in range(10, 20):
 #region vscode客户端3执行的代码片段：
 for r in range(20, 30):
 
-    for i in range(10000*r, 10000*(r+1), 50):
+    for i in range(10000*r, 10000*(r+1), 100):
         start_line = i
-        end_line = i + 49
+        end_line = i + 99
         # 调用函数并保存结果
         print(f"正在处理行 {start_line} 到 {end_line}...")
         execute_and_save(start_line, end_line)
 #endregion
 
+
 #region vscode客户端4执行的代码片段：
 for r in range(30, 40):
 
-    for i in range(10000*r, 10000*(r+1), 50):
+    for i in range(10000*r, 10000*(r+1), 100):
         start_line = i
-        end_line = i + 49
+        end_line = i + 99
         # 调用函数并保存结果
         print(f"正在处理行 {start_line} 到 {end_line}...")
         execute_and_save(start_line, end_line)
 #endregion
 
 #region vscode客户端5执行的代码片段：
-for r in range(40, 50):
+for r in range(40, 100):
 
-    for i in range(10000*r, 10000*(r+1), 50):
+    for i in range(10000*r, 10000*(r+1), 100):
         start_line = i
-        end_line = i + 49
+        end_line = i + 99
         # 调用函数并保存结果
         print(f"正在处理行 {start_line} 到 {end_line}...")
         execute_and_save(start_line, end_line)
 #endregion
 
 #region vscode客户端6执行的代码片段：
-for r in range(50, 60):
+for r in range(100, 60):
 
-    for i in range(10000*r, 10000*(r+1), 50):
+    for i in range(10000*r, 10000*(r+1), 100):
         start_line = i
-        end_line = i + 49
+        end_line = i + 99
         # 调用函数并保存结果
         print(f"正在处理行 {start_line} 到 {end_line}...")
         execute_and_save(start_line, end_line)
@@ -255,9 +261,9 @@ for r in range(50, 60):
 #region vscode客户端7执行的代码片段：
 for r in range(60, 70):
 
-    for i in range(10000*r, 10000*(r+1), 50):
+    for i in range(10000*r, 10000*(r+1), 100):
         start_line = i
-        end_line = i + 49
+        end_line = i + 99
         # 调用函数并保存结果
         print(f"正在处理行 {start_line} 到 {end_line}...")
         execute_and_save(start_line, end_line)
@@ -266,9 +272,9 @@ for r in range(60, 70):
 #region vscode客户端8执行的代码片段：
 for r in range(70, 80):
 
-    for i in range(10000*r, 10000*(r+1), 50):
+    for i in range(10000*r, 10000*(r+1), 100):
         start_line = i
-        end_line = i + 49
+        end_line = i + 99
         # 调用函数并保存结果
         print(f"正在处理行 {start_line} 到 {end_line}...")
         execute_and_save(start_line, end_line)
@@ -277,9 +283,9 @@ for r in range(70, 80):
 #region vscode客户端9执行的代码片段：
 for r in range(80, 90):
 
-    for i in range(10000*r, 10000*(r+1), 50):
+    for i in range(10000*r, 10000*(r+1), 100):
         start_line = i
-        end_line = i + 49
+        end_line = i + 99
         # 调用函数并保存结果
         print(f"正在处理行 {start_line} 到 {end_line}...")
         execute_and_save(start_line, end_line)
@@ -288,9 +294,9 @@ for r in range(80, 90):
 #region vscode客户端10执行的代码片段：
 for r in range(90, 100):
 
-    for i in range(10000*r, 10000*(r+1), 50):
+    for i in range(10000*r, 10000*(r+1), 100):
         start_line = i
-        end_line = i + 49
+        end_line = i + 99
         # 调用函数并保存结果
         print(f"正在处理行 {start_line} 到 {end_line}...")
         execute_and_save(start_line, end_line)

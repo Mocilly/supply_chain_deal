@@ -4,20 +4,19 @@ import json
 
 
 
-def talk_initialize(sk = 'sk-mqxdbrnlwcmdflpjmkoekrefarzcuyvwgszwhfltcjodzxyr',model="deepseek-ai/DeepSeek-R1"):
+def talk_initialize(sk,model):
     # 这里可以添加初始化代码，例如设置API密钥等
     url = "https://api.siliconflow.cn/v1/chat/completions"
-    model="deepseek-ai/DeepSeek-R1"
 
 
     payload = {
         "model": model,
         "messages": messages,
         "stream": True,  # 启用流式处理
-        "max_tokens": 16384,#max_tokens必须小于等于16384
+        "max_tokens": 8192,#max_tokens必须小于等于16384
         "stop": ["null"],
-        "temperature": 0.7,
-        "top_p": 0.7,
+        "temperature": 0.3,
+        "top_p": 0.3,
         "top_k": 50,
         "frequency_penalty": 0.5,
         "n": 1,
@@ -34,8 +33,8 @@ def talk_initialize(sk = 'sk-mqxdbrnlwcmdflpjmkoekrefarzcuyvwgszwhfltcjodzxyr',m
 
 
 
-def execute_conversation(message):
-    url, payload, headers = talk_initialize()  # 初始化API参数
+def execute_conversation(url, payload, headers,message):
+
     content_list = []
     is_finished = False
 
