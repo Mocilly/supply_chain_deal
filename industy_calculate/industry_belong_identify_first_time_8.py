@@ -193,6 +193,8 @@ for r in range(70, 80):
         start_line = i
         end_line = i + 99
         # 调用函数并保存结果
+        if i in range(0, 704000, 100):
+            continue
         print(f"正在处理行 {start_line} 到 {end_line}...")
         execute_and_save(start_line, end_line)
 #endregion

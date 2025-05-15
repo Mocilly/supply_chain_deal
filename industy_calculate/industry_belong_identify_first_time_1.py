@@ -189,7 +189,7 @@ for r in range(0, 10):
     for i in range(10000*r, 10000*(r+1), 100):
         start_line = i
         end_line = i +99
-        if i in [0, 100,200,300,400]:
+        if i in range(0, 4400, 100):
             continue
         # 调用函数并保存结果
         print(f"正在处理行 {start_line} 到 {end_line}...")

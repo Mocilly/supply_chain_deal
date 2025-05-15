@@ -40,7 +40,7 @@ def execute_conversation(url, payload, headers,message):
 
 
     payload["messages"] = [message]
-    response = requests.post(url, json=payload, headers=headers, stream=True)
+    response = requests.post(url, json=payload, headers=headers, stream=True,timeout=15)  # 设置合理超时timeout
 
     # 检查请求是否成功
     if response.status_code == 200:
