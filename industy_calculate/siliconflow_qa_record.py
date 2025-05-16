@@ -1,10 +1,11 @@
 import os
 import requests
 import json
+import time
 
 
 
-def talk_initialize(sk,model):
+def talk_initialize(sk='sk-mqxdbrnlwcmdflpjmkoekrefarzcuyvwgszwhfltcjodzxyr',model='Qwen/Qwen3-32B'):
     # 这里可以添加初始化代码，例如设置API密钥等
     url = "https://api.siliconflow.cn/v1/chat/completions"
 
@@ -33,55 +34,60 @@ def talk_initialize(sk,model):
 
 
 
-def execute_conversation(url, payload, headers,message):
-
+def execute_conversation(url, payload, headers, message, max_retries=10, retry_delay=5):
     content_list = []
     is_finished = False
-
-
     payload["messages"] = [message]
-    response = requests.post(url, json=payload, headers=headers, stream=True,timeout=15)  # 设置合理超时timeout
 
-    # 检查请求是否成功
-    if response.status_code == 200:
-        is_finished = False
-        first_content_output = True
-        final_result = ""
+    attempt = 0
+    while attempt < max_retries:
+        try:
+            response = requests.post(url, json=payload, headers=headers, stream=True, timeout=15)
+            # 检查请求是否成功
+            if response.status_code == 200:
+                is_finished = False
+                first_content_output = True
+                final_result = ""
 
-        for chunk in response.iter_lines():
-            if chunk:  # 过滤掉keep-alive新行
-                chunk_str = chunk.decode('utf-8').strip()
-                try:
-                    if chunk_str.startswith('data:'):
-                        chunk_str = chunk_str[6:].strip()  # 去除"data:"前缀和之后的首位空格
-                    if chunk_str == "[DONE]":  # 完成了
-                        is_finished = True
-                        break
+                for chunk in response.iter_lines():
+                    if chunk:  # 过滤掉keep-alive新行
+                        chunk_str = chunk.decode('utf-8').strip()
+                        try:
+                            if chunk_str.startswith('data:'):
+                                chunk_str = chunk_str[6:].strip()
+                            if chunk_str == "[DONE]":
+                                is_finished = True
+                                break
 
-                    # 解析JSON
-                    chunk_json = json.loads(chunk_str)
-                    if 'choices' in chunk_json and isinstance(chunk_json['choices'], list) and len(chunk_json['choices']) > 0:
-                        choice = chunk_json['choices'][0]
-                        delta = choice.get('delta', {})
-                        # 获取结果信息
-                        content = delta.get('content')
+                            chunk_json = json.loads(chunk_str)
+                            if 'choices' in chunk_json and isinstance(chunk_json['choices'], list) and len(chunk_json['choices']) > 0:
+                                choice = chunk_json['choices'][0]
+                                delta = choice.get('delta', {})
+                                content = delta.get('content')
+                                if content is not None:
+                                    final_result += content
+                                    if first_content_output:
+                                        print("\n\n==============================\n结果:")
+                                        first_content_output = False
+                                    print(content, end='', flush=True)
+                        except json.JSONDecodeError as e:
+                            print(f"JSON解码错误: {e}", flush=True)
 
-                        # 打印结果内容：content（如果有）
-                        if content is not None:
-                            final_result += content
-                            if first_content_output:
-                                print("\n\n==============================\n结果:")
-                                first_content_output = False
-                            print(content, end='', flush=True)
-
-                except json.JSONDecodeError as e:
-                    print(f"JSON解码错误: {e}", flush=True)
-
-        # 将最终结果存入content_list，去掉其中的换行符
-        content_list.append(final_result.replace('\n', '').strip())
-
-    else:
-        print(f"请求失败，状态码: {response.status_code}, 错误信息: {response.text}")
+                content_list.append(final_result.replace('\n', '').strip())
+                break  # 成功则跳出重试循环
+            else:
+                print(f"请求失败，状态码: {response.status_code}, 错误信息: {response.text}")
+                break  # 非超时错误不重试
+        except requests.exceptions.Timeout:
+            attempt += 1
+            print(f"请求超时，正在重试({attempt}/{max_retries})...")
+            if attempt < max_retries:
+                time.sleep(retry_delay)
+            else:
+                print("已达到最大重试次数，放弃请求。")
+        except requests.exceptions.RequestException as e:
+            print(f"请求异常: {e}")
+            break
 
     return content_list, is_finished
 

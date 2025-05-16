@@ -170,7 +170,7 @@ def execute_conversation_with_range(url, payload, headers,start_line, end_line):
 
 # 示例调用
 def execute_and_save(start_line, end_line):
-    url, payload, headers = talk_initialize(sk = 'sk-mqxdbrnlwcmdflpjmkoekrefarzcuyvwgszwhfltcjodzxyr',model="Qwen/Qwen3-32B")
+    url, payload, headers = talk_initialize()
     modified_entries = execute_conversation_with_range(url, payload, headers,start_line, end_line)
 #存储修改行的字典
     execute_order = f"{start_line}-{end_line}"

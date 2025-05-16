@@ -1,4 +1,6 @@
 from time import sleep
+import sys
+sys.path.append('.\industy_calculate')
 from siliconflow_qa_record import talk_initialize, execute_conversation, process_lines_to_dict
 print("调试信息:开始运行")  # 终端会显示此内容
 
@@ -170,7 +172,7 @@ def execute_conversation_with_range(url, payload, headers,start_line, end_line):
 
 # 示例调用
 def execute_and_save(start_line, end_line):
-    url, payload, headers = talk_initialize(sk = 'sk-mqxdbrnlwcmdflpjmkoekrefarzcuyvwgszwhfltcjodzxyr',model="Qwen/Qwen3-32B")
+    url, payload, headers = talk_initialize()
     modified_entries = execute_conversation_with_range(url, payload, headers,start_line, end_line)
 #存储修改行的字典
     execute_order = f"{start_line}-{end_line}"
@@ -184,19 +186,16 @@ def execute_and_save(start_line, end_line):
 
 ####################    接下来是分布执行对话（多开VScode客户端来实现），每个对话50个就将对话结果存入文件中（避免tokens过长 ds记不住上下文） ####################
 
+#region vscode客户端3执行的代码片段：
+def process_lines_with_skip(skip_until):
+    for r in range(20, 30):
 
-#region vscode客户端4执行的代码片段：
-for r in range(30, 40):
-
-    for i in range(10000*r, 10000*(r+1), 100):
-        start_line = i
-        end_line = i + 99
-        # 调用函数并保存结果
-        if i in range(0,304100,100):
-            continue
-        print(f"正在处理行 {start_line} 到 {end_line}...")
-        execute_and_save(start_line, end_line)
+        for i in range(10000*r, 10000*(r+1), 100):
+            start_line = i
+            end_line = i + 99
+            if i in range(200000, skip_until, 100):
+                continue
+            print(f"正在处理行 {start_line} 到 {end_line}...")
+            execute_and_save(start_line, end_line)
 #endregion
-
-
-
+process_lines_with_skip(205600)
