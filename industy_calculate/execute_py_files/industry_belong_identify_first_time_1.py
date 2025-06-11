@@ -184,7 +184,7 @@ def execute_and_save(start_line, end_line):
     print(f"修改的行已保存到 {output_file_path}")
 
 
-####################    接下来是分布执行对话，每个对话50个就将对话结果存入文件中（避免tokens过长 ds记不住上下文） ####################
+####################    接下来是分布执行对话，每个对话100个就将对话结果存入文件中（避免tokens过长 ds记不住上下文） ####################
 #region vscode客户端1执行的代码片段：
 def process_lines_with_skip(skip_until):
     for r in range(0, 10):
@@ -198,4 +198,4 @@ def process_lines_with_skip(skip_until):
             execute_and_save(start_line, end_line)
 #endregion
 
-process_lines_with_skip(13600)
+process_lines_with_skip(88500)
