@@ -2,7 +2,7 @@ from pathlib import Path
 import pandas as pd
 import json
 
-df = pd.read_excel(r'C:\Users\Mocilly\Desktop\GB_T 4754-2017 国民经济行业分类（一维表）.xlsx')
+df = pd.read_excel(r'.\调用文件\用于行业分类分析的可视化表\GB_T 4754-2017 国民经济行业分类（一维表）.xlsx')
 
 df.columns
 df.drop(columns=['ID','PARENT_ID', 'LEVEL_TYPE'], inplace=True)
@@ -42,20 +42,16 @@ print(f'Sub count: {sub_count}')
 
 #查看df某一列中缺失项的索引                                               
 
-null_list = df[df['DESCRIPTION'].isnull()].index.tolist()
-null_list
-df.loc[null_list]
-for i in df.index:
-
-    id = df.loc[i,'INDUSTRY_ID']
-    if len(id) != 4:
-        null_list.append(i)
-df.drop(index=null_list, inplace=True)
+# 如果DESCRIPTION栏是空的，则将NAME的内容添加到DESCRIPTION栏目中
+df.loc[df['DESCRIPTION'].isnull(), 'DESCRIPTION'] = df.loc[df['DESCRIPTION'].isnull(), 'NAME']
 
 df.drop(columns=['NAME'], inplace=True)
 
-	# 输出路径
-output_file = Path(r'.\调用文件\用于行业分类分析的可视化表\output.jsonl')
+# 删除INDUSTRY_ID全为字母的行
+df = df[~df['INDUSTRY_ID'].str.isalpha()].reset_index(drop=True)
+
+	# 输出路径，文件扩展名更改为 .json
+output_file = Path(r'.\调用文件\用于行业分类分析的可视化表\industry_code.json')
 output_file.parent.mkdir(parents=True, exist_ok=True)
  
 def clean_data(x):
@@ -66,21 +62,25 @@ def clean_data(x):
         # 清理换行符和反斜杠
         return x.replace('\n', ' ').replace('\\', '')
     return x
+
+# 将整个DataFrame进行清洗，然后转换为记录列表
+cleaned_df = df.applymap(clean_data)
+records_list = cleaned_df.to_dict(orient='records')
  
+# 将整个列表写入一个JSON文件
 with open(output_file, 'w', encoding='utf-8') as f:
-    for i in df.index:
-        cleaned_record = df.loc[i].apply(clean_data).to_dict()
-        json_line = json.dumps(
-            cleaned_record,
-            ensure_ascii=False,
-            separators=(',', ':')
-        ) + '\n'  # 正确添加换行符
-        f.write(json_line)
+    # 使用 json.dump 将列表写入文件
+    # indent=4 使JSON文件格式美观，易于阅读
+    json.dump(records_list, f, ensure_ascii=False, indent=4)
  
 # 验证文件
 with open(output_file, 'r', encoding='utf-8') as f:
-    first_line = f.readline()
-    print(repr(first_line))  # 应输出：'{"INDUSTRY_ID":"0111","DESCRIPTION":"稻谷种植"}\n'
+    # 读取并解析整个JSON文件
+    data = json.load(f)
+    print(f"成功将 {len(data)} 条记录写入 {output_file}")
+    if data:
+        print("文件中的第一条记录:")
+        print(data[0])
 
 
 

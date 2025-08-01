@@ -47,39 +47,61 @@ def parse_date(date_str: str) -> datetime:
         return None
 
 # 重建供应链关系对象
-def rebuild_relations(loaded_data: Dict, companies: Dict[str, Company]) -> List[SupplyRelation]:
+def rebuild_relations(loaded_data: Dict, companies: Dict[str, Company]) -> List[List[SupplyRelation]]:
+    """
+    重建供应链关系对象，确保构建完整的链条
+    """
     relations = []
+    
     for initial_node, chains in loaded_data.items():
-        for chain in chains:
-            nodes = chain.get('path', [])
-            final_status = chain.get('final_status', '')
-            start_time = parse_date(chain.get('start_time', None))
-            end_time = parse_date(chain.get('end_time', None))
-            rel = []
-
-            if nodes:
-                first_node = nodes[0]
-                sr = SupplyRelation(
-                    companies[initial_node],
-                    companies[first_node['name']],
-                    parse_date(first_node['start']),
-                    parse_date(first_node['end']),
+        for chain_data in chains:
+            path = chain_data.get('path', [])
+            final_status = chain_data.get('final_status', 'unknown')
+            
+            if len(path) < 2:  # 至少需要两个节点才能形成关系
+                continue
+            
+            # 构建完整的供应链关系列表
+            chain_relations = []
+            
+            # 从初始节点开始，构建每一段关系
+            current_from_id = initial_node
+            
+            for i, node_info in enumerate(path):
+                to_id = node_info['name']
+                status = node_info['status']
+                start_time = parse_date(node_info['start'])
+                end_time = parse_date(node_info['end'])
+                
+                # 确保公司存在
+                if current_from_id not in companies or to_id not in companies:
+                    print(f"警告：公司ID {current_from_id} 或 {to_id} 不存在于公司数据中")
+                    current_from_id = to_id  # 继续处理下一个关系
+                    continue
+                
+                # 创建供应关系
+                from_company = companies[current_from_id]
+                to_company = companies[to_id]
+                
+                relation = SupplyRelation(
+                    from_co=from_company,
+                    to_co=to_company,
+                    start=start_time,
+                    end=end_time
                 )
-                sr.status = first_node['status']
-                rel.append(sr)
-
-                for i in range(1, len(nodes) - 1, 2):
-                    from_co = companies[nodes[i]['name']]
-                    to_co = companies[nodes[i + 1]['name']]
-                    start = parse_date(nodes[i + 1]['start'])
-                    end = parse_date(nodes[i + 1]['end'])
-                    status = nodes[i + 1].get('status')
-                    supply_sc = SupplyRelation(from_co, to_co, start, end)
-                    supply_sc.status = status
-                    rel.append(supply_sc)
-
-                rel.append([final_status, start_time, end_time])
-                relations.append(rel)
+                relation.status = status
+                
+                chain_relations.append(relation)
+                
+                # 更新下一段关系的起始公司
+                current_from_id = to_id
+            
+            # 如果成功构建了关系，添加到结果中
+            if chain_relations:
+                # 添加最终状态信息
+                chain_relations.append(final_status)
+                relations.append(chain_relations)
+    
     return relations
 
 # 加载公司数据
@@ -97,3 +119,11 @@ def load_supply_chain_data(path: str) -> Dict:
 # 构建公司到国家的映射表
 def build_company_to_country(companies: Dict[str, Company]) -> Dict[str, Tuple[List[str], List[str]]]:
     return {company: split_countries(info.country) for company, info in companies.items()}
+
+
+import pandas as pd
+import json
+from datetime import datetime
+from typing import List, Dict, Tuple
+from component.company_supplyChain import SupplyRelation, Company
+

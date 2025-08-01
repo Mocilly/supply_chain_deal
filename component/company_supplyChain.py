@@ -23,7 +23,7 @@ class Company:
 
 class SupplyRelation:
     """增强型供应链关系对象"""
-    __slots__ = ['from_co', 'to_co', 'start', 'end', 'status']
+    __slots__ = ['from_co', 'to_co', 'start', 'end', 'status', 'industry_codes']
     
     def __init__(self, 
                  from_co: Company, 
@@ -35,7 +35,8 @@ class SupplyRelation:
         self.start = start
         self.end = end
         self.status = "active"  # active/recovered/permanent_break/break/transfer
-
+        self.industry_codes = None  # 新增行业代码属性
+        
     def __repr__(self):
         return f"<Relation {self.from_co.id}→{self.to_co.id} ({self.status})>"
     # 重写相等性判断

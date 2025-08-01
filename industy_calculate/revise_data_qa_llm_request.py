@@ -24,8 +24,6 @@ try:
     
     print(f"成功加载未匹配的行业代码信息，共 {len(loaded_missing_codes)} 个条目")
     
-
-        
 except Exception as e:
     print(f"读取未匹配的行业代码信息时出错: {e}")
 
@@ -160,7 +158,7 @@ except Exception as e:
     sys.exit(1)
 
 # 读取loaded_missing_codes的前1000行储存为新的字典变量，用于分批执行方法
-sample_1000_missing_codes = dict(list(loaded_missing_codes.items())[12000:13000])
+sample_1000_missing_codes = dict(list(loaded_missing_codes.items())[2900:3000]) #每个num对应1000条数据
 
 # 显示部分读取的内容\
 print("未匹配行业代码的前5个条目:")
@@ -169,6 +167,62 @@ for i, (key, value) in enumerate(sample_1000_missing_codes.items()):
         break
     print(f"索引 {key}: {value}")
 
-process_missing_codes_in_batches(sample_1000_missing_codes, data,num=13)
+process_missing_codes_in_batches(sample_1000_missing_codes, data,num= 1) #num分批次是为了多终端运行脚本
+
+
+
+def merge_json_files(source_dir_path: Path, output_file_path: Path):
+    """
+    合并指定目录中的所有JSON文件到一个文件中。
+
+    参数:
+    source_dir_path (Path): 包含JSON文件的源目录路径。
+    output_file_path (Path): 合并后输出的JSON文件路径。
+    """
+    merged_data = {}
+    
+    print(f"开始合并目录 '{source_dir_path}' 中的JSON文件...")
+    
+    # 确保源目录存在
+    if not source_dir_path.is_dir():
+        print(f"错误: 源目录 '{source_dir_path}' 不存在或不是一个目录。")
+        return
+
+    json_files = list(source_dir_path.glob('*.json')) # 假设所有批处理文件都是.json格式
+    
+    if not json_files:
+        print(f"在目录 '{source_dir_path}' 中没有找到JSON文件。")
+        return
+
+    for file_path in tqdm(json_files, desc="合并文件中"):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data_to_merge = json.load(f)
+                merged_data.update(data_to_merge) # 合并字典
+            print(f"已合并文件: {file_path.name}")
+        except json.JSONDecodeError:
+            print(f"警告: 文件 '{file_path.name}' 不是有效的JSON格式，已跳过。")
+        except Exception as e:
+            print(f"读取或合并文件 '{file_path.name}' 时出错: {e}")
+            
+    # 确保输出目录存在
+    output_file_path.parent.mkdir(parents=True, exist_ok=True)
+    
+    try:
+        with open(output_file_path, 'w', encoding='utf-8') as f:
+            json.dump(merged_data, f, ensure_ascii=False, indent=2)
+        print(f"\n所有JSON文件已成功合并到: {output_file_path}")
+        print(f"合并后的文件包含 {len(merged_data)} 个条目。")
+    except Exception as e:
+        print(f"写入合并后的文件 '{output_file_path}' 时出错: {e}")
+
+
+# 定义源目录和目标文件路径
+source_directory = Path(r".\调用文件\用于行业分类分析的可视化表\中间修正文件存储") # 注意这里我假设中间文件在子目录 "2" 中，根据您的process_missing_codes_in_batches函数
+target_output_file = Path(r".\调用文件\用于行业分类分析的可视化表\second_round_llm_revised.json")
+
+# 执行合并操作
+merge_json_files(source_directory, target_output_file)
+
 
 

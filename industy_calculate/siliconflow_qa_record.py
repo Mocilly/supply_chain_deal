@@ -5,7 +5,7 @@ import time
 
 
 
-def talk_initialize(sk='sk-cjnooiggzcdvsxiceldumtbobcqmpkmdianqithjsuoxupnk',model='Qwen/Qwen3-14B'):
+def talk_initialize(sk='sk-kjawctuahsedxmnhauemnarzpxdyhmazfaymsntjushpcxtu',model='Qwen/Qwen3-14B'):
     # 这里可以添加初始化代码，例如设置API密钥等
     url = "https://api.siliconflow.cn/v1/chat/completions"
 
